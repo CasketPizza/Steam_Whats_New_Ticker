@@ -1,0 +1,8 @@
+{
+  "$schema": "https://raw.githubusercontent.com/SteamClientHomebrew/Millennium/main/src/sys/plugin-schema.json",
+  "name": "ticker",
+  "common_name": "What's New Ticker",
+  "description": "Adds RSS feeds to Library What's New and displays the combined articles as a configurable ticker.",
+  "version": "1.5.1",
+  "backendType": "lua"
+}
