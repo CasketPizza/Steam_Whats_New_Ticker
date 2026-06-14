@@ -1,5 +1,5 @@
 const MILLENNIUM_IS_CLIENT_MODULE = true;
-const pluginName = "ticker";
+const pluginName = "whats-new-rss-ticker";
 
 function InitializePlugins() {
   const plugins = window.PLUGIN_LIST || (window.PLUGIN_LIST = {});
@@ -784,7 +784,7 @@ let PluginEntryPointMain = function () {
       if (refreshPromise) return refreshPromise;
       const feeds = settings.rssFeeds;
       if (!feeds.length) return [];
-      console.log(`[What's New Ticker] Refreshing ${feeds.length} RSS feed(s): ${reason}`);
+      console.log(`[What's New RSS Ticker] Refreshing ${feeds.length} RSS feed(s): ${reason}`);
       refreshPromise = Promise.all(feeds.map(fetchFeed))
         .then((updatedFeeds) => {
           settings = { ...settings, rssFeeds: updatedFeeds };
@@ -1406,7 +1406,7 @@ let PluginEntryPointMain = function () {
           empty.className = "millennium-rss-shelf-empty";
           empty.textContent = settings.rssFeeds.length
             ? "No RSS articles are currently available."
-            : "Add an RSS feed in What's New Ticker settings.";
+            : "Add an RSS feed in What's New RSS Ticker settings.";
           track.appendChild(empty);
         } else {
           const templateUnit =
@@ -2347,7 +2347,7 @@ let PluginEntryPointMain = function () {
     }
 
     const plugin = UI.definePlugin(async () => {
-      console.log("[What's New Ticker] Frontend startup");
+      console.log("[What's New RSS Ticker] Frontend startup");
 
       const existing = findExistingDesktopPopup();
       if (existing) attachPopup(existing);
@@ -2356,7 +2356,7 @@ let PluginEntryPointMain = function () {
       if (settings.rssFeeds.length) refreshFeeds("plugin startup");
 
       return {
-        title: "What's New Ticker",
+        title: "What's New RSS Ticker",
         icon: React.createElement(UI.IconsModule?.Update || UI.IconsModule?.Settings || "span", null),
         content: React.createElement(SettingsPanel, null)
       };

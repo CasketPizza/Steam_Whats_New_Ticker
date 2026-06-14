@@ -1,8 +1,10 @@
 {
   "$schema": "https://raw.githubusercontent.com/SteamClientHomebrew/Millennium/main/src/sys/plugin-schema.json",
-  "name": "ticker",
-  "common_name": "What's New Ticker",
-  "description": "Adds RSS feeds to Library What's New and displays the combined articles as a configurable ticker.",
+  "name": "whats-new-rss-ticker",
+  "common_name": "What's New RSS Ticker",
+  "description": "Adds RSS feeds to Library What's New and displays the combined articles as a configurable ticker. Requires an applied Millennium theme; tested with SpaceTheme for Steam and Fluenty.",
   "version": "1.5.1",
-  "backendType": "lua"
+  "backendType": "lua",
+  "thumbnail": "https://raw.githubusercontent.com/CasketPizza/Steam_Whats_New_Ticker/main/assets/thumbnail.png",
+  "splash_image": "https://raw.githubusercontent.com/CasketPizza/Steam_Whats_New_Ticker/main/assets/splash.png"
 }

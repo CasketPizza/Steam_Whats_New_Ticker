@@ -17,7 +17,7 @@ local function fetch_feed(payload)
         timeout = 20,
         follow_redirects = true,
         verify_ssl = true,
-        user_agent = "Millennium What's New Ticker/1.5.1",
+        user_agent = "Millennium What's New RSS Ticker/1.5.1",
         headers = {
             Accept = "application/rss+xml, application/atom+xml, application/xml, text/xml, */*"
         }
@@ -44,16 +44,16 @@ end
 FetchFeed = fetch_feed
 
 local function on_load()
-    logger:info("What's New Ticker backend loaded")
+    logger:info("What's New RSS Ticker backend loaded")
     millennium.ready()
 end
 
 local function on_frontend_loaded()
-    logger:info("What's New Ticker frontend loaded")
+    logger:info("What's New RSS Ticker frontend loaded")
 end
 
 local function on_unload()
-    logger:info("What's New Ticker unloaded")
+    logger:info("What's New RSS Ticker unloaded")
 end
 
 return {
