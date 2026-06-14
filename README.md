@@ -1,6 +1,6 @@
 # What's New RSS Ticker
 
-![What's New RSS Ticker](assets/splash.png)
+![What's New RSS Ticker scrolling preview](assets/preview.gif)
 
 A Millennium plugin that combines Steam Library's **What's New** articles with
 RSS/Atom feeds and displays them as a continuously scrolling ticker.
@@ -18,7 +18,7 @@ The plugin has been tested with:
 
 Other Millennium themes may work, but have not been tested.
 
-![What's New RSS Ticker scrolling preview](assets/preview.gif)
+![What's New RSS Ticker](assets/splash.png)
 
 ## Features
 
