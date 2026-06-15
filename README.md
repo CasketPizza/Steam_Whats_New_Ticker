@@ -37,8 +37,8 @@ Other Millennium themes may work, but have not been tested.
   configurable number of RSS articles between Steam articles.
 - Limits loaded RSS articles with a configurable maximum of 20 by default.
 - Uses the native carousel arrows to page across the combined Steam and RSS list.
-- Provides an RSS-only shelf through Library Home's Add Shelf menu.
-- Can show RSS articles exclusively on that separate shelf instead of What's New.
+- Provides an RSS-only shelf through Library Home's Add Shelf menu. (Experimental)
+- Can show RSS articles exclusively on that separate shelf instead of What's New. (Experimental)
 - Refreshes feeds when the Library is reopened, after an article closes, and at
   a configurable interval (60 minutes by default).
 - Caches the last successful feed response so temporary network failures do not
