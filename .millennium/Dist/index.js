@@ -20,11 +20,13 @@ let PluginEntryPointMain = function () {
     const DEFAULT_SETTINGS = {
       speed: 45,
       manualResumeDelay: 10,
+      scrollMode: "continuous",
+      pageIntervalSeconds: 10,
       rssFeeds: [],
       orderingMode: "chronological",
       rssPerSteam: 2,
       rssArticleLimit: 20,
-      rssShelfEnabled: false,
+      rssRows: [],
       refreshOnLibrary: true,
       refreshOnArticleClose: true,
       refreshIntervalMinutes: 60,
@@ -53,6 +55,11 @@ let PluginEntryPointMain = function () {
         : DEFAULT_SETTINGS.manualResumeDelay;
     }
 
+    function clampPageInterval(value) {
+      const number = Number(value);
+      return Number.isFinite(number) ? Math.max(2, Math.min(120, Math.round(number))) : 10;
+    }
+
     function clampRssPerSteam(value) {
       const number = Number(value);
       return Number.isFinite(number) ? Math.max(1, Math.min(20, Math.round(number))) : 2;
@@ -61,6 +68,16 @@ let PluginEntryPointMain = function () {
     function clampRssArticleLimit(value) {
       const number = Number(value);
       return Number.isFinite(number) ? Math.max(1, Math.min(200, Math.round(number))) : 20;
+    }
+
+    function normalizeRssRows(rows, legacyShelfEnabled = false) {
+      if (!Array.isArray(rows)) return legacyShelfEnabled ? [{ id: "legacy-mixed", feedUrl: "" }] : [];
+      return rows
+        .filter((row) => row && typeof row === "object")
+        .map((row, index) => ({
+          id: typeof row.id === "string" && row.id ? row.id : `rss-row-${index}`,
+          feedUrl: typeof row.feedUrl === "string" ? row.feedUrl : ""
+        }));
     }
 
     function clampRefreshInterval(value) {
@@ -89,13 +106,17 @@ let PluginEntryPointMain = function () {
         return {
           speed: clampSpeed(saved.speed),
           manualResumeDelay: clampResumeDelay(saved.manualResumeDelay),
+          scrollMode: ["continuous", "paged"].includes(saved.scrollMode)
+            ? saved.scrollMode
+            : DEFAULT_SETTINGS.scrollMode,
+          pageIntervalSeconds: clampPageInterval(saved.pageIntervalSeconds),
           rssFeeds: Array.isArray(saved.rssFeeds) ? saved.rssFeeds.map(normalizeFeed).filter(Boolean) : [],
           orderingMode: ["chronological", "alternating", "rss-shelf-only"].includes(saved.orderingMode)
             ? saved.orderingMode
             : DEFAULT_SETTINGS.orderingMode,
           rssPerSteam: clampRssPerSteam(saved.rssPerSteam),
           rssArticleLimit: clampRssArticleLimit(saved.rssArticleLimit),
-          rssShelfEnabled: saved.rssShelfEnabled === true,
+          rssRows: normalizeRssRows(saved.rssRows, saved.rssShelfEnabled === true),
           refreshOnLibrary: saved.refreshOnLibrary !== false,
           refreshOnArticleClose: saved.refreshOnArticleClose !== false,
           refreshIntervalMinutes: clampRefreshInterval(saved.refreshIntervalMinutes),
@@ -128,9 +149,16 @@ let PluginEntryPointMain = function () {
         ...next,
         speed: clampSpeed(next.speed ?? settings.speed),
         manualResumeDelay: clampResumeDelay(next.manualResumeDelay ?? settings.manualResumeDelay),
+        scrollMode: ["continuous", "paged"].includes(next.scrollMode)
+          ? next.scrollMode
+          : settings.scrollMode,
+        pageIntervalSeconds: clampPageInterval(
+          next.pageIntervalSeconds ?? settings.pageIntervalSeconds
+        ),
         rssFeeds: (next.rssFeeds ?? settings.rssFeeds).map(normalizeFeed).filter(Boolean),
         rssPerSteam: clampRssPerSteam(next.rssPerSteam ?? settings.rssPerSteam),
         rssArticleLimit: clampRssArticleLimit(next.rssArticleLimit ?? settings.rssArticleLimit),
+        rssRows: normalizeRssRows(next.rssRows ?? settings.rssRows),
         refreshIntervalMinutes: clampRefreshInterval(
           next.refreshIntervalMinutes ?? settings.refreshIntervalMinutes
         )
@@ -222,6 +250,8 @@ let PluginEntryPointMain = function () {
           max-width: none !important;
           transition: none !important;
           will-change: transform;
+          backface-visibility: hidden;
+          transform-style: preserve-3d;
         }
         [data-millennium-ticker-track] > [data-millennium-ticker-unit] {
           flex: 0 0 auto !important;
@@ -585,32 +615,12 @@ let PluginEntryPointMain = function () {
         }
         .millennium-rss-shelf {
           position: relative;
-          margin: 28px 0 18px;
+          margin: 18px 0;
           padding: 0 16px;
         }
-        .millennium-rss-shelf-header {
-          display: flex;
-          align-items: center;
-          min-height: 38px;
-          margin-bottom: 10px;
-          color: #f5f5f5;
-          font-size: 18px;
-          font-weight: 500;
-        }
-        .millennium-rss-shelf-header button {
-          margin-left: auto;
-          padding: 5px 9px;
-          color: #8f98a0;
-          background: transparent;
-          border: 0;
-          cursor: pointer;
-        }
-        .millennium-rss-shelf-header button:hover {
-          color: white;
-          background: rgba(255, 255, 255, 0.08);
-        }
         .millennium-rss-shelf-track {
-          display: flex;
+          display: flex !important;
+          flex-flow: row nowrap !important;
           align-items: flex-start;
           gap: 18px;
           width: max-content;
@@ -621,13 +631,19 @@ let PluginEntryPointMain = function () {
           overflow: hidden;
           min-width: 0;
         }
-        .millennium-rss-shelf-item {
+        .millennium-rss-shelf-item,
+        [data-millennium-rss-shelf-unit] {
           position: relative;
           display: flex;
           flex-direction: column;
           flex: 0 0 auto;
+          min-width: var(--millennium-rss-shelf-item-width, 260px) !important;
+          width: var(--millennium-rss-shelf-item-width, 260px) !important;
+          max-width: var(--millennium-rss-shelf-item-width, 260px) !important;
+        }
+        .millennium-rss-shelf-item .millennium-rss-card,
+        [data-millennium-rss-shelf-unit] .millennium-rss-card {
           min-width: 0;
-          width: 260px;
         }
         .millennium-rss-shelf-item[data-millennium-rss-date-position="above"] .millennium-rss-card-date {
           position: static;
@@ -637,27 +653,85 @@ let PluginEntryPointMain = function () {
           padding: 18px 0;
           color: #8f98a0;
         }
-        .millennium-rss-shelf-picker-option {
+        .millennium-rss-shelf-reminder {
+          margin-top: 8px;
+          color: #ffb36b;
+          font-size: 12px;
+        }
+        .millennium-row-controls {
+          display: inline-flex;
+          align-items: center;
+          margin-right: 4px;
+        }
+        .millennium-row-control {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 30px;
+          height: 30px;
+          padding: 0;
+          color: #8b929a;
+          background: transparent;
+          border: 0;
+          border-radius: 2px;
+          cursor: pointer;
+          font-size: 22px;
+          line-height: 1;
+        }
+        .millennium-row-control:hover,
+        .millennium-row-control:focus {
+          color: white;
+          background: rgba(255, 255, 255, 0.1);
+        }
+        .millennium-row-control:disabled {
+          opacity: 0.35;
+          cursor: default;
+          background: transparent;
+        }
+        .millennium-row-picker {
+          position: fixed;
+          z-index: 100001;
+          inset: 0;
           display: flex;
           align-items: center;
-          width: 100%;
-          min-height: 34px;
-          padding: 7px 12px;
+          justify-content: center;
+          padding: 32px;
+          background: rgba(0, 0, 0, 0.72);
+        }
+        .millennium-row-picker-panel {
+          width: min(460px, 90vw);
+          padding: 22px;
+          color: #d6d7d8;
+          background: #18222e;
+          box-shadow: 0 12px 60px rgba(0, 0, 0, 0.7);
+        }
+        .millennium-row-picker-panel h2 {
+          margin: 0 0 6px;
+          color: white;
+          font-size: 20px;
+        }
+        .millennium-row-picker-panel p {
+          margin: 0 0 16px;
+          color: #8f98a0;
+        }
+        .millennium-row-picker-options {
+          display: flex;
+          flex-direction: column;
+          gap: 7px;
+        }
+        .millennium-row-picker-options button {
+          padding: 10px 12px;
           color: #dcdedf;
-          background: transparent;
+          background: rgba(255, 255, 255, 0.08);
           border: 0;
           cursor: pointer;
           font: inherit;
           text-align: left;
         }
-        .millennium-rss-shelf-picker-option:hover {
+        .millennium-row-picker-options button:hover,
+        .millennium-row-picker-options button:focus {
           color: white;
-          background: rgba(255, 255, 255, 0.1);
-        }
-        .millennium-rss-shelf-reminder {
-          margin-top: 8px;
-          color: #ffb36b;
-          font-size: 12px;
+          background: rgba(103, 193, 245, 0.25);
         }
       `;
       (document.head || document.documentElement).appendChild(style);
@@ -1227,6 +1301,9 @@ let PluginEntryPointMain = function () {
         this.manualResumeDelay = settings.manualResumeDelay;
         this.offset = 0;
         this.span = 0;
+        this.pageNextAt = 0;
+        this.pageResetAt = 0;
+        this.trackTransitionAnimated = null;
         this.track = null;
         this.viewport = null;
         this.originalTrackStyle = "";
@@ -1245,15 +1322,8 @@ let PluginEntryPointMain = function () {
         this.lastLibraryRefresh = 0;
         this.currentUnits = [];
         this.archiveButton = null;
-        this.rssShelf = null;
-        this.rssShelfTrack = null;
-        this.rssShelfViewport = null;
-        this.rssShelfOriginalTrackStyle = "";
-        this.rssShelfOriginalViewportStyle = "";
-        this.rssShelfResizeObserver = null;
-        this.rssShelfOffset = 0;
-        this.rssShelfSpan = 0;
-        this.rssShelfCurrentUnits = [];
+        this.rowControls = null;
+        this.rssRows = [];
         this.rssShelfLastFrame = 0;
         this.onVisibilityChange = () => {
           this.lastFrame = 0;
@@ -1262,16 +1332,10 @@ let PluginEntryPointMain = function () {
         this.onDocumentClick = (event) => {
           if (this.forwardingCloneClick) return;
 
-          if (event.target.closest("._3SkuN_ykQuWGF94fclHdhJ")) {
-            [50, 150, 350].forEach((delay) => {
-              this.window.setTimeout(() => this.ensureShelfPickerOption(), delay);
-            });
-          }
-
           const arrow = event.target.closest(
             ".bsNegRKT1Hbv4tqHrOk9- button,._14b-hQsLwSwYcELtknxCUX,._3IIEUTw03Vm3Mk54jlnUaT"
           );
-          if (arrow && !event.target.closest(".millennium-archive-button")) {
+          if (arrow && !event.target.closest(".millennium-archive-button,.millennium-row-control")) {
             event.preventDefault();
             event.stopPropagation();
             event.stopImmediatePropagation();
@@ -1339,79 +1403,124 @@ let PluginEntryPointMain = function () {
         this.scan();
       }
 
-      ensureShelfPickerOption() {
-        if (settings.rssShelfEnabled) return;
-        const candidates = [
-          ...this.document.querySelectorAll(
-            "[role='menu'],[role='listbox'],[class*='ContextMenu'],[class*='contextMenu']"
-          )
-        ].filter(isVisible);
-        const menu = candidates.find((candidate) => {
-          const text = candidate.textContent?.toLowerCase() || "";
-          return /all games|recent games|collection|shelf|showcase/.test(text);
-        }) || candidates[candidates.length - 1];
-        if (!menu || menu.querySelector("[data-millennium-rss-shelf-option]")) return;
-        const option = this.document.createElement("button");
-        option.className = "millennium-rss-shelf-picker-option";
-        option.type = "button";
-        option.setAttribute("data-millennium-rss-shelf-option", "");
-        option.textContent = "RSS Feeds";
-        option.addEventListener("click", (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          saveSettings({ rssShelfEnabled: true });
-          this.renderRssShelf();
-          menu.remove();
+      addRssRow(feedUrl) {
+        const row = {
+          id: `rss-row-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          feedUrl
+        };
+        saveSettings({ rssRows: [...settings.rssRows, row] });
+      }
+
+      removeLastRssRow() {
+        if (!settings.rssRows.length) return;
+        saveSettings({ rssRows: settings.rssRows.slice(0, -1) });
+      }
+
+      openRssRowPicker() {
+        this.document.querySelector("[data-millennium-row-picker]")?.remove();
+        const modal = this.document.createElement("div");
+        modal.className = "millennium-row-picker";
+        modal.setAttribute("data-millennium-row-picker", "");
+        modal.setAttribute("role", "dialog");
+        modal.setAttribute("aria-modal", "true");
+        const panel = this.document.createElement("div");
+        panel.className = "millennium-row-picker-panel";
+        const title = this.document.createElement("h2");
+        title.textContent = "Add RSS row";
+        const description = this.document.createElement("p");
+        description.textContent = "Choose all RSS sources or one configured source for this row.";
+        const options = this.document.createElement("div");
+        options.className = "millennium-row-picker-options";
+        const addOption = (label, feedUrl) => {
+          const button = this.document.createElement("button");
+          button.type = "button";
+          button.textContent = label;
+          button.addEventListener("click", () => {
+            modal.remove();
+            this.addRssRow(feedUrl);
+          });
+          options.appendChild(button);
+        };
+        addOption("Mixed - all RSS sources", "");
+        settings.rssFeeds.forEach((feed) => {
+          addOption(feed.title || new URL(feed.url).hostname, feed.url);
         });
-        menu.appendChild(option);
+        const dismiss = () => modal.remove();
+        modal.addEventListener("click", (event) => {
+          if (event.target === modal) dismiss();
+        });
+        modal.addEventListener("keydown", (event) => {
+          if (event.key === "Escape") dismiss();
+        });
+        panel.append(title, description, options);
+        modal.appendChild(panel);
+        this.document.body.appendChild(modal);
+        options.querySelector("button")?.focus();
+      }
+
+      articlesForRssRows() {
+        const rows = settings.rssRows.map(() => []);
+        const allArticles = allRssArticles();
+        const articles = allArticles.slice(0, settings.rssArticleLimit);
+        const mixedIndexes = settings.rssRows
+          .map((row, index) => row.feedUrl ? -1 : index)
+          .filter((index) => index >= 0);
+        if (mixedIndexes.length) {
+          articles.forEach((article, index) => {
+            rows[mixedIndexes[index % mixedIndexes.length]].push(article);
+          });
+        }
+        settings.rssRows.forEach((row, index) => {
+          if (row.feedUrl) {
+            rows[index] = allArticles
+              .filter((article) => article.feedUrl === row.feedUrl)
+              .slice(0, settings.rssArticleLimit);
+          }
+        });
+        return rows;
       }
 
       renderRssShelf() {
         this.teardownRssShelf();
-        if (!settings.rssShelfEnabled) {
-          this.rssShelf?.remove();
-          this.rssShelf = null;
-          return;
-        }
+        this.updateRowControls();
+        if (!settings.rssRows.length) return;
         const addShelfRow = this.document.querySelector("._3SkuN_ykQuWGF94fclHdhJ");
         const whatsNewSection = findSection(this.document);
-        const anchor = addShelfRow || whatsNewSection;
-        if (!anchor?.parentElement) return;
+        const parent = addShelfRow?.parentElement || whatsNewSection?.parentElement;
+        const anchor = addShelfRow || whatsNewSection?.nextSibling || null;
+        if (!parent) return;
 
-        this.rssShelf?.remove();
-        const shelf = this.document.createElement("section");
-        shelf.className = "millennium-rss-shelf";
-        shelf.setAttribute("data-millennium-rss-shelf", "");
-        const header = this.document.createElement("header");
-        header.className = "millennium-rss-shelf-header";
-        const title = this.document.createElement("span");
-        title.textContent = "RSS Feeds";
-        const remove = this.document.createElement("button");
-        remove.type = "button";
-        remove.textContent = "Remove shelf";
-        remove.addEventListener("click", () => {
-          saveSettings({ rssShelfEnabled: false });
-          shelf.remove();
-          this.rssShelf = null;
-        });
-        header.append(title, remove);
-        const viewport = this.document.createElement("div");
-        viewport.className = "millennium-rss-shelf-viewport";
-        const track = this.document.createElement("div");
-        track.className = "millennium-rss-shelf-track";
-        track.setAttribute("data-millennium-rss-shelf-track", "");
-        const articles = allRssArticles().slice(0, settings.rssArticleLimit);
-        if (!articles.length) {
-          const empty = this.document.createElement("div");
-          empty.className = "millennium-rss-shelf-empty";
-          empty.textContent = settings.rssFeeds.length
-            ? "No RSS articles are currently available."
-            : "Add an RSS feed in What's New RSS Ticker settings.";
-          track.appendChild(empty);
-        } else {
-          const templateUnit =
-            this.currentUnits.find((unit) => unit?.isConnected && !unit.hasAttribute("data-millennium-ticker-clone")) ||
-            null;
+        const section = whatsNewSection || findSection(this.document);
+        const cards = section ? findCards(section) : [];
+        const nativeTrack = cards.length ? lowestCommonAncestor(cards, section) : null;
+        const templateUnit =
+          this.currentUnits.find((unit) => unit?.isConnected && !unit.hasAttribute("data-millennium-ticker-clone")) ||
+          (nativeTrack ? directUnit(cards[0], nativeTrack) : null);
+        const templateWidth = templateUnit?.getBoundingClientRect().width;
+        const rowArticles = this.articlesForRssRows();
+
+        settings.rssRows.forEach((rowConfig, rowIndex) => {
+          const shelf = this.document.createElement("section");
+          shelf.className = "millennium-rss-shelf";
+          shelf.setAttribute("data-millennium-rss-shelf", rowConfig.id);
+          shelf.style.setProperty(
+            "--millennium-rss-shelf-item-width",
+            `${Number.isFinite(templateWidth) && templateWidth > 0 ? templateWidth : 260}px`
+          );
+          const viewport = this.document.createElement("div");
+          viewport.className = "millennium-rss-shelf-viewport";
+          const track = this.document.createElement("div");
+          track.className = "millennium-rss-shelf-track";
+          track.setAttribute("data-millennium-rss-shelf-track", "");
+          const articles = rowArticles[rowIndex];
+          if (!articles.length) {
+            const empty = this.document.createElement("div");
+            empty.className = "millennium-rss-shelf-empty";
+            empty.textContent = settings.rssFeeds.length
+              ? "No RSS articles are currently available for this row."
+              : "Add an RSS feed in What's New RSS Ticker settings.";
+            track.appendChild(empty);
+          }
           articles.forEach((article) => {
             const unit = createRssUnit(this.document, templateUnit, article, (selectedArticle) => {
               this.articleOpen = true;
@@ -1425,55 +1534,104 @@ let PluginEntryPointMain = function () {
             unit.setAttribute("data-millennium-rss-shelf-unit", "");
             track.appendChild(unit);
           });
-        }
-        viewport.appendChild(track);
-        shelf.append(header, viewport);
-        anchor.parentElement.insertBefore(shelf, anchor);
-        this.rssShelf = shelf;
-        this.rssShelfTrack = track;
-        this.rssShelfViewport = viewport;
-        this.rssShelfOriginalTrackStyle = track.getAttribute("style") || "";
-        this.rssShelfOriginalViewportStyle = viewport.getAttribute("style") || "";
-        this.rssShelfCurrentUnits = [...track.children].filter(
-          (unit) => unit.hasAttribute("data-millennium-rss-shelf-unit")
-        );
-        this.rssShelfCurrentUnits.forEach((unit, index) => {
-          unit.setAttribute("data-millennium-ticker-unit", "");
-          const clone = unit.cloneNode(true);
-          clone.setAttribute("data-millennium-ticker-unit", "");
-          clone.setAttribute("data-millennium-ticker-clone", "");
-          clone.setAttribute("aria-hidden", "true");
-          removeDuplicateIds(clone);
-          clone.addEventListener("click", (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            const target = followPath(this.rssShelfCurrentUnits[index], nodePath(event.target, clone));
-            this.forwardingCloneClick = true;
-            try {
-              target.dispatchEvent(new this.window.MouseEvent("click", {
-                bubbles: true,
-                cancelable: true,
-                button: event.button,
-                clientX: event.clientX,
-                clientY: event.clientY
-              }));
-            } finally {
-              this.forwardingCloneClick = false;
-            }
+          viewport.appendChild(track);
+          shelf.appendChild(viewport);
+          parent.insertBefore(shelf, anchor);
+          const state = {
+            shelf,
+            track,
+            viewport,
+            resizeObserver: null,
+            offset: 0,
+            span: 0,
+            pageNextAt: 0,
+            pageResetAt: 0,
+            trackTransitionAnimated: null,
+            currentUnits: [...track.children].filter(
+              (unit) => unit.hasAttribute("data-millennium-rss-shelf-unit")
+            )
+          };
+          state.currentUnits.forEach((unit, index) => {
+            unit.setAttribute("data-millennium-ticker-unit", "");
+            const clone = unit.cloneNode(true);
+            clone.setAttribute("data-millennium-ticker-unit", "");
+            clone.setAttribute("data-millennium-ticker-clone", "");
+            clone.setAttribute("aria-hidden", "true");
+            removeDuplicateIds(clone);
+            clone.addEventListener("click", (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              const target = followPath(state.currentUnits[index], nodePath(event.target, clone));
+              this.forwardingCloneClick = true;
+              try {
+                target.dispatchEvent(new this.window.MouseEvent("click", {
+                  bubbles: true,
+                  cancelable: true,
+                  button: event.button,
+                  clientX: event.clientX,
+                  clientY: event.clientY
+                }));
+              } finally {
+                this.forwardingCloneClick = false;
+              }
+            });
+            track.appendChild(clone);
           });
-          track.appendChild(clone);
+          viewport.setAttribute("data-millennium-rss-shelf-viewport", "");
+          track.setAttribute("data-millennium-ticker-track", "");
+          this.rssRows.push(state);
+          this.measureRssShelf(state);
+          state.resizeObserver = new this.window.ResizeObserver(() => this.measureRssShelf(state));
+          state.resizeObserver.observe(viewport);
+          state.resizeObserver.observe(track);
         });
-        viewport.setAttribute("data-millennium-rss-shelf-viewport", "");
-        track.setAttribute("data-millennium-ticker-track", "");
-        this.rssShelfOffset = 0;
-        this.measureRssShelf();
-        this.rssShelfResizeObserver = new this.window.ResizeObserver(() => this.measureRssShelf());
-        this.rssShelfResizeObserver.observe(viewport);
-        this.rssShelfResizeObserver.observe(track);
+      }
+
+      ensureRowControls(archiveButton) {
+        if (this.rowControls?.isConnected) {
+          this.updateRowControls();
+          return;
+        }
+        const controls = this.document.createElement("span");
+        controls.className = "millennium-row-controls";
+        const remove = this.document.createElement("button");
+        remove.className = "millennium-row-control";
+        remove.type = "button";
+        remove.textContent = "\u2212";
+        remove.title = "Remove last RSS row";
+        remove.setAttribute("aria-label", "Remove last RSS row");
+        remove.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          this.removeLastRssRow();
+        });
+        const add = this.document.createElement("button");
+        add.className = "millennium-row-control";
+        add.type = "button";
+        add.textContent = "+";
+        add.title = "Add RSS row";
+        add.setAttribute("aria-label", "Add RSS row");
+        add.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          this.openRssRowPicker();
+        });
+        controls.append(remove, add);
+        archiveButton.insertAdjacentElement("beforebegin", controls);
+        this.rowControls = controls;
+        this.updateRowControls();
+      }
+
+      updateRowControls() {
+        const remove = this.rowControls?.querySelector("[aria-label='Remove last RSS row']");
+        if (remove) remove.disabled = settings.rssRows.length === 0;
       }
 
       ensureArchiveButton(section) {
-        if (this.archiveButton?.isConnected) return;
+        if (this.archiveButton?.isConnected) {
+          this.ensureRowControls(this.archiveButton);
+          return;
+        }
         const button = this.document.createElement("button");
         button.className = "millennium-archive-button";
         button.type = "button";
@@ -1502,6 +1660,7 @@ let PluginEntryPointMain = function () {
         if (firstArrow?.parentElement) {
           firstArrow.parentElement.insertBefore(button, firstArrow);
           this.archiveButton = button;
+          this.ensureRowControls(button);
           return;
         }
 
@@ -1531,13 +1690,17 @@ let PluginEntryPointMain = function () {
         if (settingsButton?.parentElement) settingsButton.insertAdjacentElement("afterend", button);
         else heading.insertAdjacentElement("afterend", button);
         this.archiveButton = button;
+        this.ensureRowControls(button);
       }
 
       prepareCombinedArrows(section) {
         const selector =
           ".bsNegRKT1Hbv4tqHrOk9- button,._14b-hQsLwSwYcELtknxCUX,._3IIEUTw03Vm3Mk54jlnUaT";
         section.querySelectorAll(selector).forEach((arrow) => {
-          if (arrow.classList.contains("millennium-archive-button")) return;
+          if (
+            arrow.classList.contains("millennium-archive-button") ||
+            arrow.classList.contains("millennium-row-control")
+          ) return;
           arrow.classList.remove("_16nHYucq6xgfe67DrVWLCI");
           if ("disabled" in arrow) arrow.disabled = false;
           arrow.setAttribute("aria-disabled", "false");
@@ -1557,7 +1720,8 @@ let PluginEntryPointMain = function () {
           .filter(
             (candidate) =>
               isVisible(candidate) &&
-              !candidate.classList.contains("millennium-archive-button")
+              !candidate.classList.contains("millennium-archive-button") &&
+              !candidate.classList.contains("millennium-row-control")
           )
           .sort((left, right) => left.getBoundingClientRect().left - right.getBoundingClientRect().left);
         return arrows.indexOf(arrow) <= 0 ? -1 : 1;
@@ -1566,16 +1730,60 @@ let PluginEntryPointMain = function () {
       pageCombinedTrack(direction) {
         if (!this.track?.isConnected || !this.viewport?.isConnected) return;
         this.measure();
-        const pageWidth = Math.max(1, this.viewport.clientWidth * 0.9);
+        const pageWidth = this.pageDistance(this);
         const maxOffset = Math.max(0, this.span - this.viewport.clientWidth);
         this.offset = Math.max(0, Math.min(maxOffset, this.offset + direction * pageWidth));
-        this.track.style.transform = `translate3d(${-this.offset}px, 0, 0)`;
+        this.setTrackOffset(this, this.offset, true);
         this.manualUntil = this.window.performance.now() + this.manualResumeDelay * 1000;
+        this.pageNextAt = this.manualUntil + settings.pageIntervalSeconds * 1000;
       }
 
-      measureRssShelf() {
-        if (!this.rssShelfTrack?.isConnected || !this.rssShelfViewport?.isConnected) return;
-        const originals = [...this.rssShelfTrack.children].filter(
+      setTrackOffset(state, offset, animate = false) {
+        if (state.trackTransitionAnimated !== animate) {
+          state.track.style.setProperty(
+            "transition",
+            animate ? "transform 450ms cubic-bezier(0.22, 1, 0.36, 1)" : "none",
+            "important"
+          );
+          state.trackTransitionAnimated = animate;
+        }
+        state.track.style.setProperty("transform", `translate3d(${-offset}px, 0, 0)`, "important");
+      }
+
+      pageDistance(state) {
+        const originals = [...state.track.children].filter(
+          (element) => !element.hasAttribute("data-millennium-ticker-clone")
+        );
+        if (!originals.length) return Math.max(1, state.viewport.clientWidth);
+        const first = originals[0].getBoundingClientRect();
+        const trackStyle = this.window.getComputedStyle(state.track);
+        const gap = parseFloat(trackStyle.columnGap || trackStyle.gap) || 0;
+        const stride = Math.max(1, first.width + gap);
+        const visibleCount = Math.max(1, Math.floor((state.viewport.clientWidth + gap) / stride));
+        return visibleCount * stride;
+      }
+
+      advancePagedTrack(state, time) {
+        if (state.span <= state.viewport.clientWidth) return;
+        if (state.pageResetAt && time >= state.pageResetAt) {
+          state.offset %= state.span;
+          state.pageResetAt = 0;
+          this.setTrackOffset(state, state.offset);
+        }
+        if (!state.pageNextAt) {
+          state.pageNextAt = time + settings.pageIntervalSeconds * 1000;
+          return;
+        }
+        if (time < state.pageNextAt || state.pageResetAt) return;
+        state.offset += this.pageDistance(state);
+        this.setTrackOffset(state, state.offset, true);
+        if (state.offset >= state.span) state.pageResetAt = time + 500;
+        state.pageNextAt = time + settings.pageIntervalSeconds * 1000;
+      }
+
+      measureRssShelf(state) {
+        if (!state?.track?.isConnected || !state.viewport?.isConnected) return;
+        const originals = [...state.track.children].filter(
           (element) =>
             element.hasAttribute("data-millennium-rss-shelf-unit") &&
             !element.hasAttribute("data-millennium-ticker-clone")
@@ -1583,31 +1791,39 @@ let PluginEntryPointMain = function () {
         if (!originals.length) return;
         const first = originals[0].getBoundingClientRect();
         const last = originals[originals.length - 1].getBoundingClientRect();
-        const trackStyle = this.window.getComputedStyle(this.rssShelfTrack);
+        const trackStyle = this.window.getComputedStyle(state.track);
         const gap = parseFloat(trackStyle.columnGap || trackStyle.gap) || 0;
-        this.rssShelfSpan = Math.max(0, last.right - first.left + gap);
-        this.rssShelfTrack.style.transform = `translate3d(${-this.rssShelfOffset}px, 0, 0)`;
+        state.span = Math.max(0, last.right - first.left + gap);
+        this.setTrackOffset(state, state.offset);
       }
 
       animateRssShelf(time, delta) {
-        if (!this.rssShelfTrack?.isConnected || !this.rssShelfViewport?.isConnected) return;
-        const paused =
-          this.document.hidden ||
-          modalIsOpen(this.document) ||
-          this.articleOpen ||
-          time < this.manualUntil ||
-          !this.rssShelfTrack ||
-          this.rssShelfSpan <= 0;
-        if (!paused) {
-          this.rssShelfOffset = (this.rssShelfOffset + (this.speed * delta) / 1000) % this.rssShelfSpan;
-          this.rssShelfTrack.style.transform = `translate3d(${-this.rssShelfOffset}px, 0, 0)`;
-        }
+        this.rssRows.forEach((state) => {
+          if (!state.track?.isConnected || !state.viewport?.isConnected) return;
+          const paused =
+            this.document.hidden ||
+            modalIsOpen(this.document) ||
+            this.articleOpen ||
+            time < this.manualUntil ||
+            state.span <= 0;
+          if (!paused && settings.scrollMode === "continuous") {
+            state.offset = (state.offset + (this.speed * delta) / 1000) % state.span;
+            this.setTrackOffset(state, state.offset);
+          } else if (!paused) {
+            this.advancePagedTrack(state, time);
+          }
+        });
       }
 
       scan() {
         if (this.destroyed) return;
-        this.ensureShelfPickerOption();
-        if (settings.rssShelfEnabled && !this.rssShelf?.isConnected) this.renderRssShelf();
+        if (
+          settings.rssRows.length &&
+          (this.rssRows.length !== settings.rssRows.length ||
+            this.rssRows.some((state) => !state.shelf?.isConnected))
+        ) {
+          this.renderRssShelf();
+        }
         if (this.window.performance.now() < this.manualUntil) return;
         if (this.track && this.track.isConnected && this.track.querySelector("[data-millennium-ticker-clone]")) {
           if (this.section) {
@@ -1708,6 +1924,9 @@ let PluginEntryPointMain = function () {
         });
 
         this.offset = 0;
+        this.pageNextAt = 0;
+        this.pageResetAt = 0;
+        this.trackTransitionAnimated = null;
         this.measure();
         this.resizeObserver = new this.window.ResizeObserver(() => this.measure());
         this.resizeObserver.observe(viewport);
@@ -1730,7 +1949,7 @@ let PluginEntryPointMain = function () {
       animate(time) {
         if (this.destroyed) return;
         if (!this.lastFrame) this.lastFrame = time;
-        const delta = Math.min(100, time - this.lastFrame);
+        const delta = Math.min(50, Math.max(0, time - this.lastFrame));
         this.lastFrame = time;
 
         const overlayOpen = modalIsOpen(this.document);
@@ -1749,9 +1968,11 @@ let PluginEntryPointMain = function () {
           !this.track.isConnected ||
           this.span <= 0;
 
-        if (!paused) {
+        if (!paused && settings.scrollMode === "continuous") {
           this.offset = (this.offset + (this.speed * delta) / 1000) % this.span;
-          this.track.style.transform = `translate3d(${-this.offset}px, 0, 0)`;
+          this.setTrackOffset(this, this.offset);
+        } else if (!paused) {
+          this.advancePagedTrack(this, time);
         }
 
         this.animateRssShelf(time, delta);
@@ -1785,38 +2006,16 @@ let PluginEntryPointMain = function () {
         this.currentUnits = [];
         this.offset = 0;
         this.span = 0;
+        this.pageNextAt = 0;
+        this.pageResetAt = 0;
       }
 
       teardownRssShelf() {
-        this.rssShelfResizeObserver?.disconnect();
-        this.rssShelfResizeObserver = null;
-        if (this.rssShelfTrack) {
-          this.rssShelfTrack.querySelectorAll("[data-millennium-ticker-clone]").forEach((clone) => clone.remove());
-          this.rssShelfTrack.querySelectorAll("[data-millennium-ticker-unit]").forEach((unit) => {
-            unit.removeAttribute("data-millennium-ticker-unit");
-          });
-          this.rssShelfTrack.querySelectorAll(":scope > [data-millennium-rss-shelf-unit]").forEach((unit) => {
-            unit.remove();
-          });
-          this.rssShelfTrack.removeAttribute("data-millennium-ticker-track");
-          this.rssShelfTrack.removeAttribute("data-millennium-rss-shelf-track");
-          if (this.rssShelfOriginalTrackStyle) this.rssShelfTrack.setAttribute("style", this.rssShelfOriginalTrackStyle);
-          else this.rssShelfTrack.removeAttribute("style");
-        }
-        if (this.rssShelfViewport) {
-          this.rssShelfViewport.removeAttribute("data-millennium-rss-shelf-viewport");
-          this.rssShelfViewport.removeAttribute("data-millennium-ticker-viewport");
-          if (this.rssShelfOriginalViewportStyle) {
-            this.rssShelfViewport.setAttribute("style", this.rssShelfOriginalViewportStyle);
-          } else {
-            this.rssShelfViewport.removeAttribute("style");
-          }
-        }
-        this.rssShelfTrack = null;
-        this.rssShelfViewport = null;
-        this.rssShelfCurrentUnits = [];
-        this.rssShelfOffset = 0;
-        this.rssShelfSpan = 0;
+        this.rssRows.forEach((state) => {
+          state.resizeObserver?.disconnect();
+          state.shelf?.remove();
+        });
+        this.rssRows = [];
       }
 
       destroy() {
@@ -1830,8 +2029,9 @@ let PluginEntryPointMain = function () {
         this.teardownRssShelf();
         this.archiveButton?.remove();
         this.archiveButton = null;
-        this.rssShelf?.remove();
-        this.rssShelf = null;
+        this.rowControls?.remove();
+        this.rowControls = null;
+        this.document.querySelector("[data-millennium-row-picker]")?.remove();
       }
     }
 
@@ -1839,33 +2039,7 @@ let PluginEntryPointMain = function () {
       const windowObject = popup?.window || popup?.m_popup?.window || popup;
       const name = popup?.m_strName || windowObject?.name || "";
       if (!windowObject?.document) return;
-      if (name && /contextmenu|popup/i.test(name)) {
-        [50, 150, 350].forEach((delay) => {
-          windowObject.setTimeout(() => {
-            if (settings.rssShelfEnabled) return;
-            const document = windowObject.document;
-            const text = document.body?.textContent?.toLowerCase() || "";
-            if (!/all games|recent games|collection|shelf|showcase/.test(text)) return;
-            if (document.querySelector("[data-millennium-rss-shelf-option]")) return;
-            injectStyles(document);
-            const menu = document.querySelector(
-              "[role='menu'],[role='listbox'],[class*='ContextMenu'],[class*='contextMenu']"
-            ) || document.body;
-            const option = document.createElement("button");
-            option.className = "millennium-rss-shelf-picker-option";
-            option.type = "button";
-            option.setAttribute("data-millennium-rss-shelf-option", "");
-            option.textContent = "RSS Feeds";
-            option.addEventListener("click", () => {
-              saveSettings({ rssShelfEnabled: true });
-              controllers.forEach((controller) => controller.renderRssShelf());
-              windowObject.close?.();
-            });
-            menu.appendChild(option);
-          }, delay);
-        });
-        return;
-      }
+      if (name && /contextmenu|popup/i.test(name)) return;
       if (name && !name.startsWith("SP Desktop_")) return;
       if (controllers.has(windowObject)) return;
       const controller = new TickerController(popup);
@@ -1888,6 +2062,8 @@ let PluginEntryPointMain = function () {
     function SettingsPanel() {
       const [speed, setSpeed] = React.useState(settings.speed);
       const [manualResumeDelay, setManualResumeDelay] = React.useState(settings.manualResumeDelay);
+      const [scrollMode, setScrollMode] = React.useState(settings.scrollMode);
+      const [pageIntervalSeconds, setPageIntervalSeconds] = React.useState(settings.pageIntervalSeconds);
       const [feeds, setFeeds] = React.useState(settings.rssFeeds);
       const [feedUrl, setFeedUrl] = React.useState("");
       const [feedMessage, setFeedMessage] = React.useState("");
@@ -1908,6 +2084,10 @@ let PluginEntryPointMain = function () {
       const [datePosition, setDatePosition] = React.useState(settings.datePosition);
       React.useEffect(() => {
         const listener = (nextSettings) => {
+          setSpeed(nextSettings.speed);
+          setManualResumeDelay(nextSettings.manualResumeDelay);
+          setScrollMode(nextSettings.scrollMode);
+          setPageIntervalSeconds(nextSettings.pageIntervalSeconds);
           setFeeds([...nextSettings.rssFeeds]);
           setOrderingMode(nextSettings.orderingMode);
           setRssPerSteam(nextSettings.rssPerSteam);
@@ -1933,6 +2113,16 @@ let PluginEntryPointMain = function () {
         const value = clampResumeDelay(event.currentTarget.value);
         setManualResumeDelay(value);
         saveSettings({ manualResumeDelay: value });
+      };
+      const changeScrollMode = (event) => {
+        const value = event.currentTarget.value;
+        setScrollMode(value);
+        saveSettings({ scrollMode: value });
+      };
+      const changePageInterval = (event) => {
+        const value = clampPageInterval(event.currentTarget.value);
+        setPageIntervalSeconds(value);
+        saveSettings({ pageIntervalSeconds: value });
       };
       const addFeed = async () => {
         const normalized = normalizeFeed({ url: feedUrl });
@@ -1985,30 +2175,70 @@ let PluginEntryPointMain = function () {
         React.createElement(
           UI.Field,
           {
-            label: "Scroll speed",
-            description: "How quickly What's New articles move from right to left.",
+            label: "Scrolling mode",
+            description: "Continuously scroll articles or automatically advance by complete visible pages.",
             bottomSeparator: "standard",
             focusable: true
           },
           React.createElement(
             "div",
-            { className: "millennium-ticker-speed" },
-            React.createElement("input", {
-              type: "range",
-              min: 10,
-              max: 200,
-              step: 5,
-              value: speed,
-              onChange: onSpeedChange
-            }),
-            React.createElement("output", null, `${speed} px/s`)
+            { className: "millennium-ticker-setting-row" },
+            React.createElement(
+              "select",
+              { value: scrollMode, onChange: changeScrollMode },
+              React.createElement("option", { value: "continuous" }, "Continuous smooth scrolling"),
+              React.createElement("option", { value: "paged" }, "Automatically advance visible pages")
+            )
           )
         ),
+        scrollMode === "continuous"
+          ? React.createElement(
+              UI.Field,
+              {
+                label: "Scroll speed",
+                description: "How quickly What's New and RSS rows move from right to left.",
+                bottomSeparator: "standard",
+                focusable: true
+              },
+              React.createElement(
+                "div",
+                { className: "millennium-ticker-speed" },
+                React.createElement("input", {
+                  type: "range",
+                  min: 10,
+                  max: 200,
+                  step: 5,
+                  value: speed,
+                  onChange: onSpeedChange
+                }),
+                React.createElement("output", null, `${speed} px/s`)
+              )
+            )
+          : React.createElement(
+              UI.Field,
+              {
+                label: "Page interval",
+                description: "Seconds each complete set of visible articles remains on screen.",
+                bottomSeparator: "standard",
+                focusable: true
+              },
+              React.createElement(
+                "div",
+                { className: "millennium-ticker-setting-row" },
+                React.createElement("input", {
+                  type: "number",
+                  min: 2,
+                  max: 120,
+                  value: pageIntervalSeconds,
+                  onChange: changePageInterval
+                })
+              )
+            ),
         React.createElement(
           UI.Field,
           {
             label: "Resume after manual navigation",
-            description: "How long native previous/next paging stays active after an arrow is clicked.",
+            description: "How long automatic scrolling waits after a previous or next arrow is clicked.",
             bottomSeparator: "standard",
             focusable: true
           },
@@ -2122,7 +2352,7 @@ let PluginEntryPointMain = function () {
             ? React.createElement(
                 "div",
                 { className: "millennium-rss-shelf-reminder" },
-                "Add the RSS Feeds shelf from Library Home's Add Shelf menu for RSS articles to be visible."
+                "Use the + button beside the newspaper icon in What's New to add an RSS row."
               )
             : null
         ),
@@ -2334,14 +2564,6 @@ let PluginEntryPointMain = function () {
                 )
               : null
           )
-        ),
-        React.createElement(
-          UI.Field,
-          {
-            label: "Automatic pause",
-            description: "Scrolling pauses while an article or another Steam dialog is open, then resumes when it closes.",
-            bottomSeparator: "none"
-          }
         )
       );
     }
