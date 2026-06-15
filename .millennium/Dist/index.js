@@ -1411,9 +1411,22 @@ let PluginEntryPointMain = function () {
         saveSettings({ rssRows: [...settings.rssRows, row] });
       }
 
-      removeLastRssRow() {
-        if (!settings.rssRows.length) return;
-        saveSettings({ rssRows: settings.rssRows.slice(0, -1) });
+      removeRssRow(rowId) {
+        saveSettings({ rssRows: settings.rssRows.filter((row) => row.id !== rowId) });
+      }
+
+      rssRowLabel(row, index) {
+        if (!row.feedUrl) return `Mixed RSS row ${index + 1}`;
+        const feed = settings.rssFeeds.find((candidate) => candidate.url === row.feedUrl);
+        let source = feed?.title;
+        if (!source) {
+          try {
+            source = new URL(row.feedUrl).hostname;
+          } catch {
+            source = "Configured source";
+          }
+        }
+        return `${source} RSS row`;
       }
 
       openRssRowPicker() {
@@ -1444,6 +1457,45 @@ let PluginEntryPointMain = function () {
         addOption("Mixed - all RSS sources", "");
         settings.rssFeeds.forEach((feed) => {
           addOption(feed.title || new URL(feed.url).hostname, feed.url);
+        });
+        const dismiss = () => modal.remove();
+        modal.addEventListener("click", (event) => {
+          if (event.target === modal) dismiss();
+        });
+        modal.addEventListener("keydown", (event) => {
+          if (event.key === "Escape") dismiss();
+        });
+        panel.append(title, description, options);
+        modal.appendChild(panel);
+        this.document.body.appendChild(modal);
+        options.querySelector("button")?.focus();
+      }
+
+      openRssRowRemovalPicker() {
+        if (!settings.rssRows.length) return;
+        this.document.querySelector("[data-millennium-row-picker]")?.remove();
+        const modal = this.document.createElement("div");
+        modal.className = "millennium-row-picker";
+        modal.setAttribute("data-millennium-row-picker", "");
+        modal.setAttribute("role", "dialog");
+        modal.setAttribute("aria-modal", "true");
+        const panel = this.document.createElement("div");
+        panel.className = "millennium-row-picker-panel";
+        const title = this.document.createElement("h2");
+        title.textContent = "Remove RSS row";
+        const description = this.document.createElement("p");
+        description.textContent = "Choose which configured RSS row to remove.";
+        const options = this.document.createElement("div");
+        options.className = "millennium-row-picker-options";
+        settings.rssRows.forEach((row, index) => {
+          const button = this.document.createElement("button");
+          button.type = "button";
+          button.textContent = this.rssRowLabel(row, index);
+          button.addEventListener("click", () => {
+            modal.remove();
+            this.removeRssRow(row.id);
+          });
+          options.appendChild(button);
         });
         const dismiss = () => modal.remove();
         modal.addEventListener("click", (event) => {
@@ -1598,12 +1650,12 @@ let PluginEntryPointMain = function () {
         remove.className = "millennium-row-control";
         remove.type = "button";
         remove.textContent = "\u2212";
-        remove.title = "Remove last RSS row";
-        remove.setAttribute("aria-label", "Remove last RSS row");
+        remove.title = "Remove RSS row";
+        remove.setAttribute("aria-label", "Remove RSS row");
         remove.addEventListener("click", (event) => {
           event.preventDefault();
           event.stopPropagation();
-          this.removeLastRssRow();
+          this.openRssRowRemovalPicker();
         });
         const add = this.document.createElement("button");
         add.className = "millennium-row-control";
@@ -1623,7 +1675,7 @@ let PluginEntryPointMain = function () {
       }
 
       updateRowControls() {
-        const remove = this.rowControls?.querySelector("[aria-label='Remove last RSS row']");
+        const remove = this.rowControls?.querySelector("[aria-label='Remove RSS row']");
         if (remove) remove.disabled = settings.rssRows.length === 0;
       }
 
@@ -1730,12 +1782,22 @@ let PluginEntryPointMain = function () {
       pageCombinedTrack(direction) {
         if (!this.track?.isConnected || !this.viewport?.isConnected) return;
         this.measure();
-        const pageWidth = this.pageDistance(this);
-        const maxOffset = Math.max(0, this.span - this.viewport.clientWidth);
-        this.offset = Math.max(0, Math.min(maxOffset, this.offset + direction * pageWidth));
-        this.setTrackOffset(this, this.offset, true);
-        this.manualUntil = this.window.performance.now() + this.manualResumeDelay * 1000;
-        this.pageNextAt = this.manualUntil + settings.pageIntervalSeconds * 1000;
+        this.rssRows.forEach((state) => this.measureRssShelf(state));
+        const resumeAt = this.window.performance.now() + this.manualResumeDelay * 1000;
+        [this, ...this.rssRows].forEach((state) => {
+          this.pageTrack(state, direction);
+          state.pageNextAt = resumeAt + settings.pageIntervalSeconds * 1000;
+        });
+        this.manualUntil = resumeAt;
+      }
+
+      pageTrack(state, direction) {
+        if (!state.track?.isConnected || !state.viewport?.isConnected) return;
+        const pageWidth = this.pageDistance(state);
+        const maxOffset = Math.max(0, state.span - state.viewport.clientWidth);
+        state.offset = Math.max(0, Math.min(maxOffset, state.offset + direction * pageWidth));
+        state.pageResetAt = 0;
+        this.setTrackOffset(state, state.offset, true);
       }
 
       setTrackOffset(state, offset, animate = false) {
