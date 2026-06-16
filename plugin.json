@@ -3,7 +3,7 @@
   "name": "whats-new-rss-ticker",
   "common_name": "What's New RSS Ticker",
   "description": "Adds RSS feeds to Library What's New and displays the combined articles as a configurable ticker. Works with Steam's default interface and compatible Millennium themes.",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "backendType": "lua",
   "thumbnail": "https://raw.githubusercontent.com/CasketPizza/Steam_Whats_New_Ticker/main/assets/thumbnail.png",
   "splash_image": "https://raw.githubusercontent.com/CasketPizza/Steam_Whats_New_Ticker/main/assets/splash.png"

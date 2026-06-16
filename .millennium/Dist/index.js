@@ -28,6 +28,11 @@ let PluginEntryPointMain = function () {
       rssArticleLimit: 20,
       rssRows: [],
       combineYoutubeFeedsAsOneSource: false,
+      manualArticleSizeEnabled: false,
+      rowArticleWidth: 260,
+      rowArticleHeight: 146,
+      openedArticleWidth: 900,
+      openedArticleHeight: 760,
       refreshOnLibrary: true,
       refreshOnArticleClose: true,
       refreshIntervalMinutes: 60,
@@ -89,6 +94,11 @@ let PluginEntryPointMain = function () {
       return Number.isFinite(number) ? Math.max(5, Math.min(1440, Math.round(number))) : 60;
     }
 
+    function clampArticleDimension(value, fallback, min = 80, max = 2400) {
+      const number = Number(value);
+      return Number.isFinite(number) ? Math.max(min, Math.min(max, Math.round(number))) : fallback;
+    }
+
     function normalizeFeed(feed) {
       if (!feed || typeof feed.url !== "string") return null;
       try {
@@ -108,6 +118,17 @@ let PluginEntryPointMain = function () {
       } catch {
         return null;
       }
+    }
+
+    function isYoutubeChannelFeed(feed) {
+      return feed?.feedType === "youtube" && feed.youtubeKind === "channel";
+    }
+
+    function commonYoutubeChannelMode(feeds) {
+      const modes = (Array.isArray(feeds) ? feeds : [])
+        .filter(isYoutubeChannelFeed)
+        .map((feed) => feed.youtubeChannelMode || "all");
+      return modes.length && modes.every((mode) => mode === modes[0]) ? modes[0] : "all";
     }
 
     function normalizeFeedUrl(value) {
@@ -227,6 +248,27 @@ let PluginEntryPointMain = function () {
           rssArticleLimit: clampRssArticleLimit(saved.rssArticleLimit),
           rssRows: normalizeRssRows(saved.rssRows, saved.rssShelfEnabled === true),
           combineYoutubeFeedsAsOneSource: saved.combineYoutubeFeedsAsOneSource === true,
+          manualArticleSizeEnabled: saved.manualArticleSizeEnabled === true,
+          rowArticleWidth: clampArticleDimension(
+            saved.rowArticleWidth,
+            DEFAULT_SETTINGS.rowArticleWidth,
+            120
+          ),
+          rowArticleHeight: clampArticleDimension(
+            saved.rowArticleHeight,
+            DEFAULT_SETTINGS.rowArticleHeight,
+            80
+          ),
+          openedArticleWidth: clampArticleDimension(
+            saved.openedArticleWidth,
+            DEFAULT_SETTINGS.openedArticleWidth,
+            320
+          ),
+          openedArticleHeight: clampArticleDimension(
+            saved.openedArticleHeight,
+            DEFAULT_SETTINGS.openedArticleHeight,
+            240
+          ),
           refreshOnLibrary: saved.refreshOnLibrary !== false,
           refreshOnArticleClose: saved.refreshOnArticleClose !== false,
           refreshIntervalMinutes: clampRefreshInterval(saved.refreshIntervalMinutes),
@@ -271,6 +313,28 @@ let PluginEntryPointMain = function () {
         rssRows: normalizeRssRows(next.rssRows ?? settings.rssRows),
         combineYoutubeFeedsAsOneSource:
           next.combineYoutubeFeedsAsOneSource ?? settings.combineYoutubeFeedsAsOneSource,
+        manualArticleSizeEnabled:
+          next.manualArticleSizeEnabled ?? settings.manualArticleSizeEnabled,
+        rowArticleWidth: clampArticleDimension(
+          next.rowArticleWidth ?? settings.rowArticleWidth,
+          settings.rowArticleWidth,
+          120
+        ),
+        rowArticleHeight: clampArticleDimension(
+          next.rowArticleHeight ?? settings.rowArticleHeight,
+          settings.rowArticleHeight,
+          80
+        ),
+        openedArticleWidth: clampArticleDimension(
+          next.openedArticleWidth ?? settings.openedArticleWidth,
+          settings.openedArticleWidth,
+          320
+        ),
+        openedArticleHeight: clampArticleDimension(
+          next.openedArticleHeight ?? settings.openedArticleHeight,
+          settings.openedArticleHeight,
+          240
+        ),
         refreshIntervalMinutes: clampRefreshInterval(
           next.refreshIntervalMinutes ?? settings.refreshIntervalMinutes
         )
@@ -411,6 +475,48 @@ let PluginEntryPointMain = function () {
           color: inherit;
           background: #1f2935;
           border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .millennium-manual-size-settings {
+          width: 100%;
+          margin: 0 0 12px;
+          padding: 12px 0;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .millennium-manual-size-settings h3 {
+          margin: 0 0 4px;
+          color: #dcdedf;
+          font-size: 14px;
+          font-weight: 600;
+        }
+        .millennium-manual-size-settings p {
+          margin: 0 0 10px;
+          color: #8f98a0;
+          font-size: 12px;
+          line-height: 1.4;
+        }
+        .millennium-manual-size-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+          gap: 8px 12px;
+          width: 100%;
+          margin-top: 8px;
+        }
+        .millennium-manual-size-grid label {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          min-width: 0;
+          color: #b8bcbf;
+          font-size: 12px;
+        }
+        .millennium-manual-size-grid input {
+          width: 100%;
+          box-sizing: border-box;
+          padding: 8px 10px;
+          color: inherit;
+          background: rgba(0, 0, 0, 0.25);
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          border-radius: 2px;
         }
         .millennium-date-settings {
           display: grid;
@@ -764,6 +870,10 @@ let PluginEntryPointMain = function () {
         [data-millennium-rss-shelf-unit] .millennium-rss-card {
           min-width: 0;
         }
+        .millennium-rss-shelf[data-millennium-manual-article-size="true"] [data-millennium-rss-shelf-unit] .millennium-rss-card {
+          height: var(--millennium-rss-shelf-item-height, 146px) !important;
+          aspect-ratio: auto !important;
+        }
         .millennium-rss-shelf-item[data-millennium-rss-date-position="above"] .millennium-rss-card-date {
           position: static;
           margin-bottom: 0;
@@ -1082,6 +1192,35 @@ let PluginEntryPointMain = function () {
       return articles;
     }
 
+    function currentAutomaticArticleSizes() {
+      const controller = [...controllers.values()].find((candidate) => candidate.document?.documentElement);
+      const win = controller?.window || globalThis;
+      const templateUnit = controller?.currentUnits?.find(
+        (unit) => unit?.isConnected && !unit.hasAttribute("data-millennium-ticker-clone")
+      );
+      const rowRect = templateUnit?.getBoundingClientRect?.();
+      const rowWidth = rowRect?.width > 0 ? Math.round(rowRect.width) : DEFAULT_SETTINGS.rowArticleWidth;
+      const rowHeight = rowRect?.height > 0
+        ? Math.round(rowRect.height)
+        : Math.round(rowWidth * 9 / 16);
+      const innerWidth = Number(win.innerWidth) || 1000;
+      const innerHeight = Number(win.innerHeight) || 864;
+      return {
+        rowArticleWidth: clampArticleDimension(rowWidth, DEFAULT_SETTINGS.rowArticleWidth, 120),
+        rowArticleHeight: clampArticleDimension(rowHeight, DEFAULT_SETTINGS.rowArticleHeight, 80),
+        openedArticleWidth: clampArticleDimension(
+          Math.min(900, Math.round(innerWidth * 0.9)),
+          DEFAULT_SETTINGS.openedArticleWidth,
+          320
+        ),
+        openedArticleHeight: clampArticleDimension(
+          Math.round(innerHeight * 0.88),
+          DEFAULT_SETTINGS.openedArticleHeight,
+          240
+        )
+      };
+    }
+
     function sanitizeArticleHtml(document, html, baseUrl) {
       const template = document.createElement("template");
       template.innerHTML = html || "";
@@ -1115,6 +1254,11 @@ let PluginEntryPointMain = function () {
       modal.setAttribute("aria-modal", "true");
       const panel = document.createElement("article");
       panel.className = "millennium-rss-modal-panel";
+      if (settings.manualArticleSizeEnabled) {
+        panel.style.setProperty("width", `${settings.openedArticleWidth}px`, "important");
+        panel.style.setProperty("height", `${settings.openedArticleHeight}px`, "important");
+        panel.style.setProperty("max-height", `${settings.openedArticleHeight}px`, "important");
+      }
       const close = document.createElement("button");
       close.className = "millennium-rss-modal-close";
       close.setAttribute("aria-label", "Close");
@@ -1764,16 +1908,32 @@ let PluginEntryPointMain = function () {
         const templateUnit =
           this.currentUnits.find((unit) => unit?.isConnected && !unit.hasAttribute("data-millennium-ticker-clone")) ||
           (nativeTrack ? directUnit(cards[0], nativeTrack) : null);
-        const templateWidth = templateUnit?.getBoundingClientRect().width;
+        const templateRect = templateUnit?.getBoundingClientRect();
+        const templateWidth = templateRect?.width;
+        const templateHeight = templateRect?.height;
+        const rowWidth = settings.manualArticleSizeEnabled
+          ? settings.rowArticleWidth
+          : (Number.isFinite(templateWidth) && templateWidth > 0 ? templateWidth : 260);
+        const rowHeight = settings.manualArticleSizeEnabled
+          ? settings.rowArticleHeight
+          : (Number.isFinite(templateHeight) && templateHeight > 0 ? templateHeight : Math.round(rowWidth * 9 / 16));
         const rowArticles = this.articlesForRssRows();
 
         settings.rssRows.forEach((rowConfig, rowIndex) => {
           const shelf = this.document.createElement("section");
           shelf.className = "millennium-rss-shelf";
           shelf.setAttribute("data-millennium-rss-shelf", rowConfig.id);
+          shelf.setAttribute(
+            "data-millennium-manual-article-size",
+            settings.manualArticleSizeEnabled ? "true" : "false"
+          );
           shelf.style.setProperty(
             "--millennium-rss-shelf-item-width",
-            `${Number.isFinite(templateWidth) && templateWidth > 0 ? templateWidth : 260}px`
+            `${rowWidth}px`
+          );
+          shelf.style.setProperty(
+            "--millennium-rss-shelf-item-height",
+            `${rowHeight}px`
           );
           const viewport = this.document.createElement("div");
           viewport.className = "millennium-rss-shelf-viewport";
@@ -2347,7 +2507,9 @@ let PluginEntryPointMain = function () {
       const [pageIntervalSeconds, setPageIntervalSeconds] = React.useState(settings.pageIntervalSeconds);
       const [feeds, setFeeds] = React.useState(settings.rssFeeds);
       const [feedUrl, setFeedUrl] = React.useState("");
-      const [youtubeChannelMode, setYoutubeChannelMode] = React.useState("all");
+      const [youtubeChannelMode, setYoutubeChannelMode] = React.useState(
+        commonYoutubeChannelMode(settings.rssFeeds)
+      );
       const [feedMessage, setFeedMessage] = React.useState("");
       const [orderingMode, setOrderingMode] = React.useState(settings.orderingMode);
       const [rssPerSteam, setRssPerSteam] = React.useState(settings.rssPerSteam);
@@ -2355,6 +2517,13 @@ let PluginEntryPointMain = function () {
       const [combineYoutubeFeedsAsOneSource, setCombineYoutubeFeedsAsOneSource] = React.useState(
         settings.combineYoutubeFeedsAsOneSource
       );
+      const [manualArticleSizeEnabled, setManualArticleSizeEnabled] = React.useState(
+        settings.manualArticleSizeEnabled
+      );
+      const [rowArticleWidth, setRowArticleWidth] = React.useState(settings.rowArticleWidth);
+      const [rowArticleHeight, setRowArticleHeight] = React.useState(settings.rowArticleHeight);
+      const [openedArticleWidth, setOpenedArticleWidth] = React.useState(settings.openedArticleWidth);
+      const [openedArticleHeight, setOpenedArticleHeight] = React.useState(settings.openedArticleHeight);
       const [refreshOnLibrary, setRefreshOnLibrary] = React.useState(settings.refreshOnLibrary);
       const [refreshOnArticleClose, setRefreshOnArticleClose] = React.useState(
         settings.refreshOnArticleClose
@@ -2374,10 +2543,16 @@ let PluginEntryPointMain = function () {
           setScrollMode(nextSettings.scrollMode);
           setPageIntervalSeconds(nextSettings.pageIntervalSeconds);
           setFeeds([...nextSettings.rssFeeds]);
+          setYoutubeChannelMode(commonYoutubeChannelMode(nextSettings.rssFeeds));
           setOrderingMode(nextSettings.orderingMode);
           setRssPerSteam(nextSettings.rssPerSteam);
           setRssArticleLimit(nextSettings.rssArticleLimit);
           setCombineYoutubeFeedsAsOneSource(nextSettings.combineYoutubeFeedsAsOneSource);
+          setManualArticleSizeEnabled(nextSettings.manualArticleSizeEnabled);
+          setRowArticleWidth(nextSettings.rowArticleWidth);
+          setRowArticleHeight(nextSettings.rowArticleHeight);
+          setOpenedArticleWidth(nextSettings.openedArticleWidth);
+          setOpenedArticleHeight(nextSettings.openedArticleHeight);
           setRefreshOnLibrary(nextSettings.refreshOnLibrary);
           setRefreshOnArticleClose(nextSettings.refreshOnArticleClose);
           setRefreshIntervalMinutes(nextSettings.refreshIntervalMinutes);
@@ -2448,6 +2623,49 @@ let PluginEntryPointMain = function () {
         notifyControllers();
         setFeedMessage("");
       };
+      const applyYoutubeChannelModeToAll = async (mode) => {
+        const value = ["all", "videos", "shorts"].includes(mode) ? mode : "all";
+        setYoutubeChannelMode(value);
+        const channelFeeds = settings.rssFeeds.filter(isYoutubeChannelFeed);
+        if (!channelFeeds.length) {
+          setFeedMessage("New YouTube channel feeds will use that video type.");
+          return;
+        }
+        const interimFeeds = settings.rssFeeds.map((feed) =>
+          isYoutubeChannelFeed(feed) ? { ...feed, youtubeChannelMode: value } : feed
+        );
+        saveSettings({ rssFeeds: interimFeeds });
+        setFeedMessage(`Updating ${channelFeeds.length} YouTube channel feed${channelFeeds.length === 1 ? "" : "s"}...`);
+        const loadedFeeds = await Promise.all(
+          interimFeeds.map((feed) => isYoutubeChannelFeed(feed) ? fetchFeed(feed) : feed)
+        );
+        saveSettings({ rssFeeds: loadedFeeds });
+        saveRssCache();
+        notifyControllers();
+        const failed = loadedFeeds.filter((feed) => isYoutubeChannelFeed(feed) && feed.error).length;
+        setFeedMessage(
+          failed
+            ? `Updated YouTube channel modes, but ${failed} feed${failed === 1 ? "" : "s"} could not refresh.`
+            : "Updated all YouTube channel feed modes."
+        );
+      };
+      const changeFeedYoutubeChannelMode = async (url, mode) => {
+        const value = ["all", "videos", "shorts"].includes(mode) ? mode : "all";
+        const existing = settings.rssFeeds.find((feed) => feed.url === url);
+        if (!existing) return;
+        const updatedFeed = { ...existing, youtubeChannelMode: value };
+        const interimFeeds = settings.rssFeeds.map((feed) =>
+          feed.url === url ? updatedFeed : feed
+        );
+        saveSettings({ rssFeeds: interimFeeds });
+        setFeedMessage("Updating YouTube feed...");
+        const loaded = await fetchFeed(updatedFeed);
+        const nextFeeds = interimFeeds.map((feed) => feed.url === url ? loaded : feed);
+        saveSettings({ rssFeeds: nextFeeds });
+        saveRssCache();
+        notifyControllers();
+        setFeedMessage(loaded.error || "YouTube feed updated.");
+      };
       const changeOrderingMode = (event) => {
         const value = event.currentTarget.value;
         setOrderingMode(value);
@@ -2462,6 +2680,46 @@ let PluginEntryPointMain = function () {
         const value = clampRssArticleLimit(event.currentTarget.value);
         setRssArticleLimit(value);
         saveSettings({ rssArticleLimit: value });
+      };
+      const changeManualArticleSizeEnabled = (event) => {
+        const enabled = event.currentTarget.checked;
+        setManualArticleSizeEnabled(enabled);
+        if (!enabled) {
+          saveSettings({ manualArticleSizeEnabled: false });
+          return;
+        }
+        const automatic = currentAutomaticArticleSizes();
+        setRowArticleWidth(automatic.rowArticleWidth);
+        setRowArticleHeight(automatic.rowArticleHeight);
+        setOpenedArticleWidth(automatic.openedArticleWidth);
+        setOpenedArticleHeight(automatic.openedArticleHeight);
+        saveSettings({
+          manualArticleSizeEnabled: true,
+          rowArticleWidth: automatic.rowArticleWidth,
+          rowArticleHeight: automatic.rowArticleHeight,
+          openedArticleWidth: automatic.openedArticleWidth,
+          openedArticleHeight: automatic.openedArticleHeight
+        });
+      };
+      const changeRowArticleWidth = (event) => {
+        const value = clampArticleDimension(event.currentTarget.value, rowArticleWidth, 120);
+        setRowArticleWidth(value);
+        saveSettings({ rowArticleWidth: value });
+      };
+      const changeRowArticleHeight = (event) => {
+        const value = clampArticleDimension(event.currentTarget.value, rowArticleHeight, 80);
+        setRowArticleHeight(value);
+        saveSettings({ rowArticleHeight: value });
+      };
+      const changeOpenedArticleWidth = (event) => {
+        const value = clampArticleDimension(event.currentTarget.value, openedArticleWidth, 320);
+        setOpenedArticleWidth(value);
+        saveSettings({ openedArticleWidth: value });
+      };
+      const changeOpenedArticleHeight = (event) => {
+        const value = clampArticleDimension(event.currentTarget.value, openedArticleHeight, 240);
+        setOpenedArticleHeight(value);
+        saveSettings({ openedArticleHeight: value });
       };
       const changeRefreshInterval = (event) => {
         const value = clampRefreshInterval(event.currentTarget.value);
@@ -2588,12 +2846,12 @@ let PluginEntryPointMain = function () {
                 "select",
                 {
                   value: youtubeChannelMode,
-                  "aria-label": "YouTube channel video type",
-                  onChange: (event) => setYoutubeChannelMode(event.currentTarget.value)
+                  "aria-label": "Set all YouTube channel feed video types",
+                  onChange: (event) => applyYoutubeChannelModeToAll(event.currentTarget.value)
                 },
-                React.createElement("option", { value: "all" }, "YouTube channels: all videos"),
-                React.createElement("option", { value: "videos" }, "YouTube channels: normal videos only"),
-                React.createElement("option", { value: "shorts" }, "YouTube channels: Shorts only")
+                React.createElement("option", { value: "all" }, "Set all YouTube channels: all videos"),
+                React.createElement("option", { value: "videos" }, "Set all YouTube channels: normal videos only"),
+                React.createElement("option", { value: "shorts" }, "Set all YouTube channels: Shorts only")
               )
             ),
             feedMessage
@@ -2625,6 +2883,21 @@ let PluginEntryPointMain = function () {
                               "div",
                               { className: "millennium-rss-feed-error", title: feed.error },
                               feed.error
+                            )
+                          : null
+                        ,
+                        feed.feedType === "youtube" && feed.youtubeKind === "channel"
+                          ? React.createElement(
+                              "select",
+                              {
+                                value: feed.youtubeChannelMode || "all",
+                                "aria-label": `Video type for ${feed.title || feed.originalUrl || feed.url}`,
+                                onChange: (event) =>
+                                  changeFeedYoutubeChannelMode(feed.url, event.currentTarget.value)
+                              },
+                              React.createElement("option", { value: "all" }, "All videos"),
+                              React.createElement("option", { value: "videos" }, "Normal videos only"),
+                              React.createElement("option", { value: "shorts" }, "Shorts only")
                             )
                           : null
                       ),
@@ -2681,6 +2954,82 @@ let PluginEntryPointMain = function () {
               value: rssArticleLimit,
               onChange: changeRssArticleLimit
             })
+          )
+        ),
+        React.createElement(
+          "section",
+          { className: "millennium-manual-size-settings" },
+          React.createElement("h3", null, "Manual article size override"),
+          React.createElement(
+            "p",
+            null,
+            "Force RSS row card size and opened article popup size instead of using automatic layout measurements."
+          ),
+          React.createElement(
+            "label",
+            null,
+            React.createElement("input", {
+              type: "checkbox",
+              checked: manualArticleSizeEnabled,
+              onChange: changeManualArticleSizeEnabled
+            }),
+            " Enable manual sizing"
+          ),
+          React.createElement(
+            "div",
+            { className: "millennium-manual-size-grid" },
+            React.createElement(
+              "label",
+              null,
+              "Row width",
+              React.createElement("input", {
+                type: "number",
+                min: 120,
+                max: 2400,
+                disabled: !manualArticleSizeEnabled,
+                value: rowArticleWidth,
+                onChange: changeRowArticleWidth
+              })
+            ),
+            React.createElement(
+              "label",
+              null,
+              "Row height",
+              React.createElement("input", {
+                type: "number",
+                min: 80,
+                max: 2400,
+                disabled: !manualArticleSizeEnabled,
+                value: rowArticleHeight,
+                onChange: changeRowArticleHeight
+              })
+            ),
+            React.createElement(
+              "label",
+              null,
+              "Opened width",
+              React.createElement("input", {
+                type: "number",
+                min: 320,
+                max: 2400,
+                disabled: !manualArticleSizeEnabled,
+                value: openedArticleWidth,
+                onChange: changeOpenedArticleWidth
+              })
+            ),
+            React.createElement(
+              "label",
+              null,
+              "Opened height",
+              React.createElement("input", {
+                type: "number",
+                min: 240,
+                max: 2400,
+                disabled: !manualArticleSizeEnabled,
+                value: openedArticleHeight,
+                onChange: changeOpenedArticleHeight
+              })
+            )
           )
         ),
         React.createElement(

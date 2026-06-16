@@ -37,7 +37,9 @@ Other Millennium themes may work, but have not been tested.
   URL field without leaving a broken entry in the feed list.
 - Shows YouTube feed thumbnails and opens YouTube videos in the article popup
   when Steam's webview allows embedded playback.
-- YouTube channel feeds can be added as all videos, normal videos, or Shorts.
+- YouTube channel feeds can show all videos, normal videos, or Shorts, with
+  controls for changing one saved feed or applying one mode to every saved
+  YouTube channel feed.
 - Displays RSS entries as What's New cards and opens them in a Library overlay.
 - Provides configurable RSS publication date formatting, time format, weekday,
   and placement around each card.
@@ -54,6 +56,8 @@ Other Millennium themes may work, but have not been tested.
 - YouTube feeds can optionally be grouped under one combined source name.
 - Matches RSS row card widths to the native What's New cards and omits redundant
   row headings.
+- Provides an optional manual size override for RSS row article cards and opened
+  RSS article popups.
 - Displays Steam articles followed by newest RSS entries, or alternates a
   configurable number of RSS articles between Steam articles.
 - Limits loaded RSS articles with a configurable maximum of 20 by default.
@@ -87,7 +91,8 @@ remain listed, while any cached articles stay available.
 YouTube playlist and channel URLs are converted to YouTube's Atom feed format
 automatically. Channel URLs support direct `/channel/...` links, handles, custom
 URLs, and user URLs. Channel feeds are newest-first and can be filtered to all
-videos, normal videos, or Shorts when they are added. Shorts detection depends
+videos, normal videos, or Shorts per saved feed, or changed in bulk with the
+YouTube channel selector above the feed list. Shorts detection depends
 on markers exposed by YouTube's feed data, so entries without a Shorts marker
 are treated as normal videos.
 
