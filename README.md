@@ -8,12 +8,12 @@ advancing carousel.
 
 ## Requirements and Theme Compatibility
 
-> [!IMPORTANT]
-> An applied Millennium theme is required. This plugin does not work with
-> Steam's unthemed default interface.
+No Steam skin or Millennium theme is required. The plugin works with Steam's
+default interface and can also run alongside compatible Millennium themes.
 
 The plugin has been tested with:
 
+- Steam's default interface
 - [SpaceTheme for Steam](https://steambrew.app/theme/zQndv1rI0FXLh3QTRgOL)
 - [Fluenty](https://steambrew.app/fluenty-steam)
 
@@ -60,14 +60,21 @@ Other Millennium themes may work, but have not been tested.
 
 ## Usage
 
-Install and apply a compatible Millennium theme, enable
-**What's New RSS Ticker**, and restart Steam when prompted. Then open
-Millennium settings and select **What's New RSS Ticker** to adjust the ticker
-and RSS feed settings. In Library Home, use the `+` button beside the newspaper
-button to add an RSS row, choose mixed sources or one configured feed, and use
-the `-` button to choose any configured RSS row to remove. The main What's New
-row is never included in the removal choices and always remains available.
+Enable **What's New RSS Ticker** in Millennium and restart Steam when prompted.
+Then open Millennium settings and select **What's New RSS Ticker** to adjust
+the ticker and RSS feed settings. In Library Home, use the `+` button beside
+the newspaper button to add an RSS row, choose mixed sources or one configured
+feed, and use the `-` button to choose any configured RSS row to remove. The
+main What's New row is never included in the removal choices and always remains
+available.
 
 RSS feeds are downloaded by the Millennium backend so feeds do not need to
 permit browser cross-origin requests. A feed that fails remains listed with an
 error, while any previously cached articles stay available.
+
+## Source Layout
+
+- `src/frontend/index.js` contains the readable frontend source.
+- `.millennium/Dist/index.js` is the installed frontend entrypoint used by
+  Millennium.
+- `backend/main.lua` contains the backend feed fetcher.
