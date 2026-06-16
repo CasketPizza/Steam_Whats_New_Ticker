@@ -27,6 +27,7 @@ let PluginEntryPointMain = function () {
       rssPerSteam: 2,
       rssArticleLimit: 20,
       rssRows: [],
+      combineYoutubeFeedsAsOneSource: false,
       refreshOnLibrary: true,
       refreshOnArticleClose: true,
       refreshIntervalMinutes: 60,
@@ -76,7 +77,10 @@ let PluginEntryPointMain = function () {
         .filter((row) => row && typeof row === "object")
         .map((row, index) => ({
           id: typeof row.id === "string" && row.id ? row.id : `rss-row-${index}`,
-          feedUrl: typeof row.feedUrl === "string" ? row.feedUrl : ""
+          feedUrl: typeof row.feedUrl === "string" ? row.feedUrl : "",
+          sourceType: ["mixed-all", "mixed-non-youtube", "mixed-youtube", "feed"].includes(row.sourceType)
+            ? row.sourceType
+            : (row.feedUrl ? "feed" : "mixed-all")
         }));
     }
 
@@ -88,16 +92,121 @@ let PluginEntryPointMain = function () {
     function normalizeFeed(feed) {
       if (!feed || typeof feed.url !== "string") return null;
       try {
-        const url = new URL(feed.url.trim());
+        const url = new URL(normalizeFeedUrl(feed.url));
         if (!["http:", "https:"].includes(url.protocol)) return null;
         return {
           url: url.href,
+          originalUrl: typeof feed.originalUrl === "string" ? feed.originalUrl : url.href,
           title: typeof feed.title === "string" ? feed.title.trim() : "",
-          error: typeof feed.error === "string" ? feed.error : ""
+          error: typeof feed.error === "string" ? feed.error : "",
+          feedType: typeof feed.feedType === "string" ? feed.feedType : feedTypeFromUrl(url.href),
+          youtubeKind: typeof feed.youtubeKind === "string" ? feed.youtubeKind : youtubeKindFromUrl(url.href),
+          youtubeChannelMode: ["all", "shorts", "videos"].includes(feed.youtubeChannelMode)
+            ? feed.youtubeChannelMode
+            : "all"
         };
       } catch {
         return null;
       }
+    }
+
+    function normalizeFeedUrl(value) {
+      const url = new URL(value.trim());
+      const hostname = url.hostname.replace(/^www\./i, "").toLowerCase();
+      if (
+        hostname === "gametrailers.com" &&
+        url.pathname.replace(/\/+$/g, "").toLowerCase() === "/rss/newest.xml"
+      ) {
+        return "https://www.youtube.com/feeds/videos.xml?user=GameTrailers";
+      }
+      if (hostname === "youtube.com" || hostname === "m.youtube.com") {
+        const playlistId = url.searchParams.get("list");
+        if (playlistId) {
+          return `https://www.youtube.com/feeds/videos.xml?playlist_id=${encodeURIComponent(playlistId)}`;
+        }
+        if (url.pathname.toLowerCase() === "/feeds/videos.xml") {
+          return url.href;
+        }
+        const parts = url.pathname.split("/").filter(Boolean);
+        if (parts[0]?.toLowerCase() === "channel" && parts[1]) {
+          return `https://www.youtube.com/feeds/videos.xml?channel_id=${encodeURIComponent(parts[1])}`;
+        }
+      }
+      return url.href;
+    }
+
+    function feedTypeFromUrl(value) {
+      try {
+        const url = new URL(value);
+        return url.hostname.includes("youtube.com") && url.pathname === "/feeds/videos.xml"
+          ? "youtube"
+          : "feed";
+      } catch {
+        return "feed";
+      }
+    }
+
+    function youtubeKindFromUrl(value) {
+      try {
+        const url = new URL(value);
+        if (!url.hostname.includes("youtube.com") || url.pathname !== "/feeds/videos.xml") return "";
+        if (url.searchParams.has("playlist_id")) return "playlist";
+        if (url.searchParams.has("channel_id") || url.searchParams.has("user")) return "channel";
+      } catch {}
+      return "";
+    }
+
+    function isYoutubeChannelInput(value) {
+      try {
+        const url = new URL(value.trim());
+        const hostname = url.hostname.replace(/^www\./i, "").toLowerCase();
+        if (!["youtube.com", "m.youtube.com"].includes(hostname)) return false;
+        if (url.pathname.toLowerCase() === "/feeds/videos.xml") return false;
+        if (url.searchParams.get("list")) return false;
+        const parts = url.pathname.split("/").filter(Boolean);
+        return parts[0]?.startsWith("@") ||
+          ["channel", "c", "user"].includes(parts[0]?.toLowerCase());
+      } catch {
+        return false;
+      }
+    }
+
+    async function fetchUrlBody(url) {
+      const backendResult = await Millennium.callServerMethod(pluginName, "FetchFeed", {
+        payload: JSON.stringify({ url })
+      });
+      const response = JSON.parse(backendResult);
+      if (response.error) throw new Error(response.error);
+      return response.body || "";
+    }
+
+    async function resolveYoutubeChannelFeed(inputUrl) {
+      const url = new URL(inputUrl.trim());
+      const parts = url.pathname.split("/").filter(Boolean);
+      if (parts[0]?.toLowerCase() === "channel" && parts[1]) {
+        return `https://www.youtube.com/feeds/videos.xml?channel_id=${encodeURIComponent(parts[1])}`;
+      }
+      const html = await fetchUrlBody(url.href);
+      const channelId = html.match(/"channelId"\s*:\s*"([^"]+)"/)?.[1] ||
+        html.match(/<meta\s+itemprop=["']channelId["']\s+content=["']([^"']+)["']/i)?.[1] ||
+        html.match(/youtube\.com\/channel\/(UC[\w-]+)/i)?.[1];
+      if (!channelId) {
+        throw new Error("Could not find a YouTube channel ID for that URL.");
+      }
+      return `https://www.youtube.com/feeds/videos.xml?channel_id=${encodeURIComponent(channelId)}`;
+    }
+
+    async function normalizeFeedInput(value, youtubeChannelMode) {
+      const originalUrl = value.trim();
+      const resolvedUrl = isYoutubeChannelInput(originalUrl)
+        ? await resolveYoutubeChannelFeed(originalUrl)
+        : originalUrl;
+      const normalized = normalizeFeed({ url: resolvedUrl, originalUrl });
+      if (!normalized) return null;
+      if (normalized.feedType === "youtube" && normalized.youtubeKind === "channel") {
+        normalized.youtubeChannelMode = youtubeChannelMode;
+      }
+      return normalized;
     }
 
     function loadSettings() {
@@ -117,6 +226,7 @@ let PluginEntryPointMain = function () {
           rssPerSteam: clampRssPerSteam(saved.rssPerSteam),
           rssArticleLimit: clampRssArticleLimit(saved.rssArticleLimit),
           rssRows: normalizeRssRows(saved.rssRows, saved.rssShelfEnabled === true),
+          combineYoutubeFeedsAsOneSource: saved.combineYoutubeFeedsAsOneSource === true,
           refreshOnLibrary: saved.refreshOnLibrary !== false,
           refreshOnArticleClose: saved.refreshOnArticleClose !== false,
           refreshIntervalMinutes: clampRefreshInterval(saved.refreshIntervalMinutes),
@@ -159,6 +269,8 @@ let PluginEntryPointMain = function () {
         rssPerSteam: clampRssPerSteam(next.rssPerSteam ?? settings.rssPerSteam),
         rssArticleLimit: clampRssArticleLimit(next.rssArticleLimit ?? settings.rssArticleLimit),
         rssRows: normalizeRssRows(next.rssRows ?? settings.rssRows),
+        combineYoutubeFeedsAsOneSource:
+          next.combineYoutubeFeedsAsOneSource ?? settings.combineYoutubeFeedsAsOneSource,
         refreshIntervalMinutes: clampRefreshInterval(
           next.refreshIntervalMinutes ?? settings.refreshIntervalMinutes
         )
@@ -491,6 +603,13 @@ let PluginEntryPointMain = function () {
           max-height: 360px;
           object-fit: cover;
         }
+        .millennium-rss-modal-video {
+          width: 100%;
+          aspect-ratio: 16 / 9;
+          display: block;
+          background: #000;
+          border: 0;
+        }
         .millennium-rss-modal-body {
           padding: 28px 34px 34px;
         }
@@ -759,23 +878,60 @@ let PluginEntryPointMain = function () {
     }
 
     function imageFrom(entry, baseUrl, content) {
-      const media = [...entry.getElementsByTagName("*")].find((element) => {
+      const mediaItems = [...entry.getElementsByTagName("*")].filter((element) => {
         const name = element.localName.toLowerCase();
         return ["content", "thumbnail", "enclosure"].includes(name) &&
           (element.hasAttribute("url") || element.hasAttribute("href"));
       });
-      const mediaUrl = media?.getAttribute("url") || media?.getAttribute("href");
-      if (mediaUrl && (media?.getAttribute("type") || "").startsWith("image/")) {
-        return resolveUrl(mediaUrl, baseUrl);
-      }
-      if (mediaUrl && /(\.png|\.jpe?g|\.webp|\.gif)(\?|$)/i.test(mediaUrl)) {
-        return resolveUrl(mediaUrl, baseUrl);
+      for (const media of mediaItems) {
+        const mediaUrl = media.getAttribute("url") || media.getAttribute("href");
+        if (mediaUrl && (media.getAttribute("type") || "").startsWith("image/")) {
+          return resolveUrl(mediaUrl, baseUrl);
+        }
+        if (mediaUrl && /(\.png|\.jpe?g|\.webp|\.gif)(\?|$)/i.test(mediaUrl)) {
+          return resolveUrl(mediaUrl, baseUrl);
+        }
       }
       const match = content.match(/<img[^>]+src=["']([^"']+)["']/i);
       return resolveUrl(match?.[1] || "", baseUrl);
     }
 
-    function parseFeed(xmlText, feedUrl) {
+    function youtubeVideoId(entry, link) {
+      const videoId = directChildText(entry, ["videoId"]);
+      if (videoId) return videoId;
+      const id = directChildText(entry, ["id"]);
+      const taggedId = id.match(/video:([^:]+)$/i)?.[1];
+      if (taggedId) return taggedId;
+      try {
+        const url = new URL(link);
+        if (url.hostname.includes("youtu.be")) return url.pathname.split("/").filter(Boolean)[0] || "";
+        if (url.hostname.includes("youtube.com")) return url.searchParams.get("v") || "";
+      } catch {}
+      return "";
+    }
+
+    function articleImage(entry, feedUrl, content, videoId) {
+      return imageFrom(entry, feedUrl, content) ||
+        (videoId ? `https://i.ytimg.com/vi/${encodeURIComponent(videoId)}/hqdefault.jpg` : "");
+    }
+
+    function youtubeArticleKind(entry, link, content) {
+      const haystack = `${link || ""} ${content || ""} ${
+        [...entry.getElementsByTagName("*")].map((element) =>
+          `${element.getAttribute("url") || ""} ${element.getAttribute("href") || ""}`
+        ).join(" ")
+      }`.toLowerCase();
+      return haystack.includes("/shorts/") || /(^|\s)#shorts?(\s|$)/i.test(haystack) ? "short" : "video";
+    }
+
+    function feedSourceTitle(feed, parsedTitle) {
+      if (settings.combineYoutubeFeedsAsOneSource && feed.feedType === "youtube") return "YouTube";
+      return parsedTitle || new URL(feed.url).hostname;
+    }
+
+    function parseFeed(xmlText, feed) {
+      const feedUrl = typeof feed === "string" ? feed : feed.url;
+      const feedSettings = typeof feed === "string" ? normalizeFeed({ url: feed }) : feed;
       const parser = new DOMParser();
       const document = parser.parseFromString(xmlText, "application/xml");
       const parseError = document.querySelector("parsererror");
@@ -786,13 +942,29 @@ let PluginEntryPointMain = function () {
       const atom = root?.localName?.toLowerCase() === "feed";
       if (!channel && !atom) throw new Error("No RSS channel or Atom feed was found.");
 
-      const sourceTitle = directChildText(atom ? root : channel, ["title"]);
-      const entries = atom
+      const parsedTitle = directChildText(atom ? root : channel, ["title"]);
+      const sourceTitle = feedSourceTitle(feedSettings, parsedTitle);
+      const entries = (atom
         ? [...root.children].filter((element) => element.localName.toLowerCase() === "entry")
-        : [...channel.children].filter((element) => element.localName.toLowerCase() === "item");
+        : [...channel.children].filter((element) => element.localName.toLowerCase() === "item"))
+        .filter((entry) => {
+          if (feedSettings.youtubeKind !== "channel" || feedSettings.youtubeChannelMode === "all") return true;
+          const content = directChildText(entry, ["encoded", "content", "description", "summary"]);
+          const atomLink = [...entry.children].filter(
+            (element) => element.localName.toLowerCase() === "link"
+          ).find(
+            (link) => !link.getAttribute("rel") || link.getAttribute("rel") === "alternate"
+          );
+          const link = resolveUrl(
+            atomLink?.getAttribute("href") || directChildText(entry, ["link"]),
+            feedUrl
+          );
+          const kind = youtubeArticleKind(entry, link, content);
+          return feedSettings.youtubeChannelMode === "shorts" ? kind === "short" : kind !== "short";
+        });
 
       return {
-        title: sourceTitle || new URL(feedUrl).hostname,
+        title: sourceTitle,
         articles: entries.slice(0, 30).map((entry, index) => {
           const title = directChildText(entry, ["title"]) || "Untitled article";
           const content = directChildText(
@@ -811,15 +983,18 @@ let PluginEntryPointMain = function () {
           const dateText = directChildText(entry, ["pubDate", "published", "updated", "date"]);
           const timestamp = Date.parse(dateText);
           const guid = directChildText(entry, ["guid", "id"]) || link || `${title}-${index}`;
+          const videoId = youtubeVideoId(entry, link);
           return {
             id: `${feedUrl}::${guid}`,
             feedUrl,
-            source: sourceTitle || new URL(feedUrl).hostname,
+            source: sourceTitle,
             title,
             link,
             content,
             summary: content.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300),
-            image: imageFrom(entry, feedUrl, content),
+            image: articleImage(entry, feedUrl, content, videoId),
+            videoId,
+            videoProvider: videoId ? "youtube" : "",
             timestamp: Number.isFinite(timestamp) ? timestamp : Date.now() - index
           };
         })
@@ -835,7 +1010,7 @@ let PluginEntryPointMain = function () {
         if (response.error) throw new Error(response.error);
         const xmlText = response.body || "";
         if (!xmlText) throw new Error("The feed response was empty.");
-        const parsed = parseFeed(xmlText, feed.url);
+        const parsed = parseFeed(xmlText, feed);
         rssCache[feed.url] = {
           title: parsed.title,
           articles: parsed.articles,
@@ -891,6 +1066,22 @@ let PluginEntryPointMain = function () {
         .sort((left, right) => right.timestamp - left.timestamp);
     }
 
+    function mixedRssArticles() {
+      const articles = allRssArticles();
+      return articles;
+    }
+
+    function feedIsYoutube(feedUrl) {
+      return settings.rssFeeds.some((feed) => feed.url === feedUrl && feed.feedType === "youtube");
+    }
+
+    function articlesForRowType(sourceType) {
+      const articles = mixedRssArticles();
+      if (sourceType === "mixed-youtube") return articles.filter((article) => feedIsYoutube(article.feedUrl));
+      if (sourceType === "mixed-non-youtube") return articles.filter((article) => !feedIsYoutube(article.feedUrl));
+      return articles;
+    }
+
     function sanitizeArticleHtml(document, html, baseUrl) {
       const template = document.createElement("template");
       template.innerHTML = html || "";
@@ -929,7 +1120,15 @@ let PluginEntryPointMain = function () {
       close.setAttribute("aria-label", "Close");
       close.textContent = "\u00d7";
       panel.appendChild(close);
-      if (article.image) {
+      if (article.videoProvider === "youtube" && article.videoId) {
+        const video = document.createElement("iframe");
+        video.className = "millennium-rss-modal-video";
+        video.src = `https://www.youtube.com/embed/${encodeURIComponent(article.videoId)}?autoplay=1&rel=0`;
+        video.title = article.title;
+        video.allow = "autoplay; encrypted-media; picture-in-picture";
+        video.allowFullscreen = true;
+        panel.appendChild(video);
+      } else if (article.image) {
         const image = document.createElement("img");
         image.className = "millennium-rss-modal-hero";
         image.src = article.image;
@@ -957,7 +1156,7 @@ let PluginEntryPointMain = function () {
         link.href = article.link;
         link.target = "_blank";
         link.rel = "noreferrer";
-        link.textContent = "Continue reading";
+        link.textContent = article.videoProvider === "youtube" ? "Open in browser" : "Continue reading";
         body.appendChild(link);
       }
       panel.appendChild(body);
@@ -1151,9 +1350,10 @@ let PluginEntryPointMain = function () {
       return current;
     }
 
-    function openArticleArchive(document, units) {
+    function openArticleArchive(document, units, rssArticles = []) {
       document.querySelector("[data-millennium-archive-modal]")?.remove();
       const originals = units.filter((unit) => unit?.isConnected);
+      const totalCount = originals.length + rssArticles.length;
       const modal = document.createElement("div");
       modal.className = "millennium-archive-modal";
       modal.setAttribute("data-millennium-archive-modal", "");
@@ -1171,11 +1371,11 @@ let PluginEntryPointMain = function () {
       const title = document.createElement("h1");
       title.textContent = "What's New - All Articles";
       const count = document.createElement("div");
-      count.textContent = `${originals.length} Steam and RSS article${originals.length === 1 ? "" : "s"}`;
+      count.textContent = `${totalCount} Steam and RSS article${totalCount === 1 ? "" : "s"}`;
       header.append(title, count);
       const grid = document.createElement("div");
       grid.className = "millennium-archive-grid";
-      if (!originals.length) {
+      if (!totalCount) {
         const empty = document.createElement("div");
         empty.className = "millennium-archive-empty";
         empty.textContent = "No articles are currently available.";
@@ -1202,6 +1402,17 @@ let PluginEntryPointMain = function () {
               clientY: event.clientY
             }));
           });
+          grid.appendChild(wrapper);
+        });
+        rssArticles.forEach((article) => {
+          const wrapper = document.createElement("div");
+          wrapper.className = "millennium-archive-item";
+          const unit = createRssUnit(document, null, article, (selectedArticle) => {
+            dismiss();
+            openRssArticle(document, selectedArticle);
+          });
+          unit.setAttribute("data-millennium-ticker-unit", "");
+          wrapper.appendChild(unit);
           grid.appendChild(wrapper);
         });
       }
@@ -1403,10 +1614,11 @@ let PluginEntryPointMain = function () {
         this.scan();
       }
 
-      addRssRow(feedUrl) {
+      addRssRow(feedUrl, sourceType = feedUrl ? "feed" : "mixed-all") {
         const row = {
           id: `rss-row-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          feedUrl
+          feedUrl,
+          sourceType
         };
         saveSettings({ rssRows: [...settings.rssRows, row] });
       }
@@ -1416,7 +1628,9 @@ let PluginEntryPointMain = function () {
       }
 
       rssRowLabel(row, index) {
-        if (!row.feedUrl) return `Mixed RSS row ${index + 1}`;
+        if (row.sourceType === "mixed-youtube") return `Mixed YouTube RSS row ${index + 1}`;
+        if (row.sourceType === "mixed-non-youtube") return `Mixed non-YouTube RSS row ${index + 1}`;
+        if (!row.feedUrl) return `Mixed all sources RSS row ${index + 1}`;
         const feed = settings.rssFeeds.find((candidate) => candidate.url === row.feedUrl);
         let source = feed?.title;
         if (!source) {
@@ -1444,19 +1658,21 @@ let PluginEntryPointMain = function () {
         description.textContent = "Choose all RSS sources or one configured source for this row.";
         const options = this.document.createElement("div");
         options.className = "millennium-row-picker-options";
-        const addOption = (label, feedUrl) => {
+        const addOption = (label, feedUrl, sourceType) => {
           const button = this.document.createElement("button");
           button.type = "button";
           button.textContent = label;
           button.addEventListener("click", () => {
             modal.remove();
-            this.addRssRow(feedUrl);
+            this.addRssRow(feedUrl, sourceType);
           });
           options.appendChild(button);
         };
-        addOption("Mixed - all RSS sources", "");
+        addOption("Mixed - all RSS sources", "", "mixed-all");
+        addOption("Mixed - non-YouTube sources only", "", "mixed-non-youtube");
+        addOption("Mixed - YouTube sources only", "", "mixed-youtube");
         settings.rssFeeds.forEach((feed) => {
-          addOption(feed.title || new URL(feed.url).hostname, feed.url);
+          addOption(feed.title || new URL(feed.url).hostname, feed.url, "feed");
         });
         const dismiss = () => modal.remove();
         modal.addEventListener("click", (event) => {
@@ -1513,17 +1729,17 @@ let PluginEntryPointMain = function () {
       articlesForRssRows() {
         const rows = settings.rssRows.map(() => []);
         const allArticles = allRssArticles();
-        const articles = allArticles.slice(0, settings.rssArticleLimit);
-        const mixedIndexes = settings.rssRows
-          .map((row, index) => row.feedUrl ? -1 : index)
-          .filter((index) => index >= 0);
-        if (mixedIndexes.length) {
-          articles.forEach((article, index) => {
+        ["mixed-all", "mixed-non-youtube", "mixed-youtube"].forEach((sourceType) => {
+          const mixedIndexes = settings.rssRows
+            .map((row, index) => row.sourceType === sourceType ? index : -1)
+            .filter((index) => index >= 0);
+          if (!mixedIndexes.length) return;
+          articlesForRowType(sourceType).slice(0, settings.rssArticleLimit).forEach((article, index) => {
             rows[mixedIndexes[index % mixedIndexes.length]].push(article);
           });
-        }
+        });
         settings.rssRows.forEach((row, index) => {
-          if (row.feedUrl) {
+          if (row.sourceType === "feed" && row.feedUrl) {
             rows[index] = allArticles
               .filter((article) => article.feedUrl === row.feedUrl)
               .slice(0, settings.rssArticleLimit);
@@ -1703,7 +1919,10 @@ let PluginEntryPointMain = function () {
                 (unit) => !unit.hasAttribute("data-millennium-ticker-clone")
               )
             : [];
-          openArticleArchive(this.document, liveUnits.length ? liveUnits : fallbackUnits);
+          const visibleUnits = (liveUnits.length ? liveUnits : fallbackUnits).filter(
+            (unit) => !unit.hasAttribute("data-millennium-rss-unit")
+          );
+          openArticleArchive(this.document, visibleUnits, allRssArticles());
         });
 
         const arrowSelector =
@@ -1925,7 +2144,7 @@ let PluginEntryPointMain = function () {
         const templateUnit = nativeUnits[0];
         const tickerRssArticles = settings.orderingMode === "rss-shelf-only"
           ? []
-          : allRssArticles().slice(0, settings.rssArticleLimit);
+          : mixedRssArticles().slice(0, settings.rssArticleLimit);
         const rssUnits = tickerRssArticles.map((article) => {
           const unit = createRssUnit(this.document, templateUnit, article, (selectedArticle) => {
             this.articleOpen = true;
@@ -2128,10 +2347,14 @@ let PluginEntryPointMain = function () {
       const [pageIntervalSeconds, setPageIntervalSeconds] = React.useState(settings.pageIntervalSeconds);
       const [feeds, setFeeds] = React.useState(settings.rssFeeds);
       const [feedUrl, setFeedUrl] = React.useState("");
+      const [youtubeChannelMode, setYoutubeChannelMode] = React.useState("all");
       const [feedMessage, setFeedMessage] = React.useState("");
       const [orderingMode, setOrderingMode] = React.useState(settings.orderingMode);
       const [rssPerSteam, setRssPerSteam] = React.useState(settings.rssPerSteam);
       const [rssArticleLimit, setRssArticleLimit] = React.useState(settings.rssArticleLimit);
+      const [combineYoutubeFeedsAsOneSource, setCombineYoutubeFeedsAsOneSource] = React.useState(
+        settings.combineYoutubeFeedsAsOneSource
+      );
       const [refreshOnLibrary, setRefreshOnLibrary] = React.useState(settings.refreshOnLibrary);
       const [refreshOnArticleClose, setRefreshOnArticleClose] = React.useState(
         settings.refreshOnArticleClose
@@ -2154,6 +2377,7 @@ let PluginEntryPointMain = function () {
           setOrderingMode(nextSettings.orderingMode);
           setRssPerSteam(nextSettings.rssPerSteam);
           setRssArticleLimit(nextSettings.rssArticleLimit);
+          setCombineYoutubeFeedsAsOneSource(nextSettings.combineYoutubeFeedsAsOneSource);
           setRefreshOnLibrary(nextSettings.refreshOnLibrary);
           setRefreshOnArticleClose(nextSettings.refreshOnArticleClose);
           setRefreshIntervalMinutes(nextSettings.refreshIntervalMinutes);
@@ -2187,9 +2411,15 @@ let PluginEntryPointMain = function () {
         saveSettings({ pageIntervalSeconds: value });
       };
       const addFeed = async () => {
-        const normalized = normalizeFeed({ url: feedUrl });
+        let normalized = null;
+        try {
+          normalized = await normalizeFeedInput(feedUrl, youtubeChannelMode);
+        } catch (error) {
+          setFeedMessage(`Could not resolve feed URL: ${error?.message || String(error)}`);
+          return;
+        }
         if (!normalized) {
-          setFeedMessage("Enter a valid HTTP or HTTPS feed URL.");
+          setFeedMessage("Enter a valid HTTP, HTTPS, RSS, Atom, YouTube playlist, or YouTube channel URL.");
           return;
         }
         if (settings.rssFeeds.some((feed) => feed.url === normalized.url)) {
@@ -2197,11 +2427,18 @@ let PluginEntryPointMain = function () {
           return;
         }
         setFeedMessage("Loading feed...");
-        saveSettings({ rssFeeds: [...settings.rssFeeds, normalized] });
+        const loaded = await fetchFeed(normalized);
+        if (loaded.error) {
+          delete rssCache[normalized.url];
+          saveRssCache();
+          setFeedMessage(loaded.error);
+          return;
+        }
+        saveSettings({ rssFeeds: [...settings.rssFeeds, loaded] });
+        saveRssCache();
+        notifyControllers();
         setFeedUrl("");
-        await refreshFeeds("feed added");
-        const updated = settings.rssFeeds.find((feed) => feed.url === normalized.url);
-        setFeedMessage(updated?.error || "Feed added.");
+        setFeedMessage("Feed added.");
       };
       const removeFeed = (url) => {
         const nextFeeds = settings.rssFeeds.filter((feed) => feed.url !== url);
@@ -2344,6 +2581,21 @@ let PluginEntryPointMain = function () {
               }),
               React.createElement("button", { type: "button", onClick: addFeed }, "Add")
             ),
+            React.createElement(
+              "div",
+              { className: "millennium-ticker-setting-row", style: { marginTop: "8px" } },
+              React.createElement(
+                "select",
+                {
+                  value: youtubeChannelMode,
+                  "aria-label": "YouTube channel video type",
+                  onChange: (event) => setYoutubeChannelMode(event.currentTarget.value)
+                },
+                React.createElement("option", { value: "all" }, "YouTube channels: all videos"),
+                React.createElement("option", { value: "videos" }, "YouTube channels: normal videos only"),
+                React.createElement("option", { value: "shorts" }, "YouTube channels: Shorts only")
+              )
+            ),
             feedMessage
               ? React.createElement("div", { className: "millennium-rss-warning" }, feedMessage)
               : null,
@@ -2365,8 +2617,8 @@ let PluginEntryPointMain = function () {
                         ),
                         React.createElement(
                           "div",
-                          { className: "millennium-rss-feed-url", title: feed.url },
-                          feed.url
+                          { className: "millennium-rss-feed-url", title: feed.originalUrl || feed.url },
+                          feed.originalUrl || feed.url
                         ),
                         feed.error
                           ? React.createElement(
@@ -2409,14 +2661,7 @@ let PluginEntryPointMain = function () {
               React.createElement("option", { value: "alternating" }, "Alternate Steam and RSS articles"),
               React.createElement("option", { value: "rss-shelf-only" }, "RSS articles on separate shelf only")
             )
-          ),
-          orderingMode === "rss-shelf-only"
-            ? React.createElement(
-                "div",
-                { className: "millennium-rss-shelf-reminder" },
-                "Use the + button beside the newspaper icon in What's New to add an RSS row."
-              )
-            : null
+          )
         ),
         React.createElement(
           UI.Field,
@@ -2436,6 +2681,29 @@ let PluginEntryPointMain = function () {
               value: rssArticleLimit,
               onChange: changeRssArticleLimit
             })
+          )
+        ),
+        React.createElement(
+          UI.Field,
+          {
+            label: "Mixed RSS rows",
+            description: "Control how YouTube feeds are grouped in mixed rows.",
+            bottomSeparator: "standard"
+          },
+          React.createElement(
+            "label",
+            { style: { width: "100%" } },
+            React.createElement("input", {
+              type: "checkbox",
+              checked: combineYoutubeFeedsAsOneSource,
+              onChange: (event) => {
+                const value = event.currentTarget.checked;
+                setCombineYoutubeFeedsAsOneSource(value);
+                saveSettings({ combineYoutubeFeedsAsOneSource: value });
+                refreshFeeds("YouTube source grouping changed");
+              }
+            }),
+            " Combine all YouTube feeds as one source"
           )
         ),
         orderingMode === "alternating"

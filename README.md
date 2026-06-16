@@ -31,17 +31,27 @@ Other Millennium themes may work, but have not been tested.
 - Restores Steam's native previous/next pagination when an arrow is clicked.
 - Resumes ticker mode after a configurable delay (10 seconds by default).
 - Configurable speed from 10 to 200 pixels per second.
-- Adds and removes RSS or Atom feed URLs from Millennium settings.
+- Adds and removes RSS, Atom, YouTube playlist, and YouTube channel URLs from
+  Millennium settings.
+- Validates new feeds before saving them; failed feeds show an error below the
+  URL field without leaving a broken entry in the feed list.
+- Shows YouTube feed thumbnails and opens YouTube videos in the article popup
+  when Steam's webview allows embedded playback.
+- YouTube channel feeds can be added as all videos, normal videos, or Shorts.
 - Displays RSS entries as What's New cards and opens them in a Library overlay.
 - Provides configurable RSS publication date formatting, time format, weekday,
   and placement around each card.
 - Adds a newspaper button beside the What's New settings cog for browsing all
-  currently loaded Steam and RSS articles in one scrollable grid.
+  currently loaded Steam articles and every loaded RSS article in one
+  scrollable grid.
 - Adds `+` and `-` controls beside the newspaper button for creating and removing
   RSS rows without using Steam's Add Shelf menu.
 - New RSS rows can combine every configured source or display one selected feed.
+- Mixed RSS rows can include all sources, non-YouTube sources only, or YouTube
+  sources only.
 - Multiple mixed RSS rows divide the available article pool between them so the
   same article is not repeated across mixed rows.
+- YouTube feeds can optionally be grouped under one combined source name.
 - Matches RSS row card widths to the native What's New cards and omits redundant
   row headings.
 - Displays Steam articles followed by newest RSS entries, or alternates a
@@ -63,14 +73,27 @@ Other Millennium themes may work, but have not been tested.
 Enable **What's New RSS Ticker** in Millennium and restart Steam when prompted.
 Then open Millennium settings and select **What's New RSS Ticker** to adjust
 the ticker and RSS feed settings. In Library Home, use the `+` button beside
-the newspaper button to add an RSS row, choose mixed sources or one configured
-feed, and use the `-` button to choose any configured RSS row to remove. The
-main What's New row is never included in the removal choices and always remains
-available.
+the newspaper button to add an RSS row. Rows can show mixed all-source articles,
+mixed non-YouTube articles, mixed YouTube-only articles, or one configured feed.
+Use the `-` button to choose any configured RSS row to remove. The main What's
+New row is never included in the removal choices and always remains available.
 
 RSS feeds are downloaded by the Millennium backend so feeds do not need to
-permit browser cross-origin requests. A feed that fails remains listed with an
-error, while any previously cached articles stay available.
+permit browser cross-origin requests. Newly added feeds are checked before they
+are saved; if a feed fails, the error is shown under the URL box and no broken
+feed entry is added. Previously saved feeds that fail during a later refresh
+remain listed, while any cached articles stay available.
+
+YouTube playlist and channel URLs are converted to YouTube's Atom feed format
+automatically. Channel URLs support direct `/channel/...` links, handles, custom
+URLs, and user URLs. Channel feeds are newest-first and can be filtered to all
+videos, normal videos, or Shorts when they are added. Shorts detection depends
+on markers exposed by YouTube's feed data, so entries without a Shorts marker
+are treated as normal videos.
+
+The legacy GameTrailers newest feed URL is redirected to the GameTrailers
+YouTube feed. YouTube article links use an **Open in browser** button in the
+popup.
 
 ## Source Layout
 
