@@ -2524,6 +2524,10 @@ let PluginEntryPointMain = function () {
       const [rowArticleHeight, setRowArticleHeight] = React.useState(settings.rowArticleHeight);
       const [openedArticleWidth, setOpenedArticleWidth] = React.useState(settings.openedArticleWidth);
       const [openedArticleHeight, setOpenedArticleHeight] = React.useState(settings.openedArticleHeight);
+      const [rowArticleWidthInput, setRowArticleWidthInput] = React.useState(String(settings.rowArticleWidth));
+      const [rowArticleHeightInput, setRowArticleHeightInput] = React.useState(String(settings.rowArticleHeight));
+      const [openedArticleWidthInput, setOpenedArticleWidthInput] = React.useState(String(settings.openedArticleWidth));
+      const [openedArticleHeightInput, setOpenedArticleHeightInput] = React.useState(String(settings.openedArticleHeight));
       const [refreshOnLibrary, setRefreshOnLibrary] = React.useState(settings.refreshOnLibrary);
       const [refreshOnArticleClose, setRefreshOnArticleClose] = React.useState(
         settings.refreshOnArticleClose
@@ -2553,6 +2557,10 @@ let PluginEntryPointMain = function () {
           setRowArticleHeight(nextSettings.rowArticleHeight);
           setOpenedArticleWidth(nextSettings.openedArticleWidth);
           setOpenedArticleHeight(nextSettings.openedArticleHeight);
+          setRowArticleWidthInput(String(nextSettings.rowArticleWidth));
+          setRowArticleHeightInput(String(nextSettings.rowArticleHeight));
+          setOpenedArticleWidthInput(String(nextSettings.openedArticleWidth));
+          setOpenedArticleHeightInput(String(nextSettings.openedArticleHeight));
           setRefreshOnLibrary(nextSettings.refreshOnLibrary);
           setRefreshOnArticleClose(nextSettings.refreshOnArticleClose);
           setRefreshIntervalMinutes(nextSettings.refreshIntervalMinutes);
@@ -2693,6 +2701,10 @@ let PluginEntryPointMain = function () {
         setRowArticleHeight(automatic.rowArticleHeight);
         setOpenedArticleWidth(automatic.openedArticleWidth);
         setOpenedArticleHeight(automatic.openedArticleHeight);
+        setRowArticleWidthInput(String(automatic.rowArticleWidth));
+        setRowArticleHeightInput(String(automatic.rowArticleHeight));
+        setOpenedArticleWidthInput(String(automatic.openedArticleWidth));
+        setOpenedArticleHeightInput(String(automatic.openedArticleHeight));
         saveSettings({
           manualArticleSizeEnabled: true,
           rowArticleWidth: automatic.rowArticleWidth,
@@ -2702,23 +2714,39 @@ let PluginEntryPointMain = function () {
         });
       };
       const changeRowArticleWidth = (event) => {
-        const value = clampArticleDimension(event.currentTarget.value, rowArticleWidth, 120);
-        setRowArticleWidth(value);
-        saveSettings({ rowArticleWidth: value });
+        setRowArticleWidthInput(event.currentTarget.value);
       };
       const changeRowArticleHeight = (event) => {
-        const value = clampArticleDimension(event.currentTarget.value, rowArticleHeight, 80);
-        setRowArticleHeight(value);
-        saveSettings({ rowArticleHeight: value });
+        setRowArticleHeightInput(event.currentTarget.value);
       };
       const changeOpenedArticleWidth = (event) => {
-        const value = clampArticleDimension(event.currentTarget.value, openedArticleWidth, 320);
-        setOpenedArticleWidth(value);
-        saveSettings({ openedArticleWidth: value });
+        setOpenedArticleWidthInput(event.currentTarget.value);
       };
       const changeOpenedArticleHeight = (event) => {
-        const value = clampArticleDimension(event.currentTarget.value, openedArticleHeight, 240);
+        setOpenedArticleHeightInput(event.currentTarget.value);
+      };
+      const commitRowArticleWidth = () => {
+        const value = clampArticleDimension(rowArticleWidthInput, rowArticleWidth, 120);
+        setRowArticleWidth(value);
+        setRowArticleWidthInput(String(value));
+        saveSettings({ rowArticleWidth: value });
+      };
+      const commitRowArticleHeight = () => {
+        const value = clampArticleDimension(rowArticleHeightInput, rowArticleHeight, 80);
+        setRowArticleHeight(value);
+        setRowArticleHeightInput(String(value));
+        saveSettings({ rowArticleHeight: value });
+      };
+      const commitOpenedArticleWidth = () => {
+        const value = clampArticleDimension(openedArticleWidthInput, openedArticleWidth, 320);
+        setOpenedArticleWidth(value);
+        setOpenedArticleWidthInput(String(value));
+        saveSettings({ openedArticleWidth: value });
+      };
+      const commitOpenedArticleHeight = () => {
+        const value = clampArticleDimension(openedArticleHeightInput, openedArticleHeight, 240);
         setOpenedArticleHeight(value);
+        setOpenedArticleHeightInput(String(value));
         saveSettings({ openedArticleHeight: value });
       };
       const changeRefreshInterval = (event) => {
@@ -2987,8 +3015,12 @@ let PluginEntryPointMain = function () {
                 min: 120,
                 max: 2400,
                 disabled: !manualArticleSizeEnabled,
-                value: rowArticleWidth,
-                onChange: changeRowArticleWidth
+                value: rowArticleWidthInput,
+                onChange: changeRowArticleWidth,
+                onBlur: commitRowArticleWidth,
+                onKeyDown: (event) => {
+                  if (event.key === "Enter") event.currentTarget.blur();
+                }
               })
             ),
             React.createElement(
@@ -3000,8 +3032,12 @@ let PluginEntryPointMain = function () {
                 min: 80,
                 max: 2400,
                 disabled: !manualArticleSizeEnabled,
-                value: rowArticleHeight,
-                onChange: changeRowArticleHeight
+                value: rowArticleHeightInput,
+                onChange: changeRowArticleHeight,
+                onBlur: commitRowArticleHeight,
+                onKeyDown: (event) => {
+                  if (event.key === "Enter") event.currentTarget.blur();
+                }
               })
             ),
             React.createElement(
@@ -3013,8 +3049,12 @@ let PluginEntryPointMain = function () {
                 min: 320,
                 max: 2400,
                 disabled: !manualArticleSizeEnabled,
-                value: openedArticleWidth,
-                onChange: changeOpenedArticleWidth
+                value: openedArticleWidthInput,
+                onChange: changeOpenedArticleWidth,
+                onBlur: commitOpenedArticleWidth,
+                onKeyDown: (event) => {
+                  if (event.key === "Enter") event.currentTarget.blur();
+                }
               })
             ),
             React.createElement(
@@ -3026,8 +3066,12 @@ let PluginEntryPointMain = function () {
                 min: 240,
                 max: 2400,
                 disabled: !manualArticleSizeEnabled,
-                value: openedArticleHeight,
-                onChange: changeOpenedArticleHeight
+                value: openedArticleHeightInput,
+                onChange: changeOpenedArticleHeight,
+                onBlur: commitOpenedArticleHeight,
+                onKeyDown: (event) => {
+                  if (event.key === "Enter") event.currentTarget.blur();
+                }
               })
             )
           )
