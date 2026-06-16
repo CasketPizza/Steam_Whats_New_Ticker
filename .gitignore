@@ -4,8 +4,3 @@ node_modules/
 .env.*
 .DS_Store
 Thumbs.db
-
-# Keep Millennium's compiled plugin bundle in version control.
-!.millennium/
-!.millennium/Dist/
-!.millennium/Dist/index.js
